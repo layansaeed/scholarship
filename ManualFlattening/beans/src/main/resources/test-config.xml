@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--  When we add a new table, we just add a new <entity> section to this file - no Java coding required!-->
+<!--  <entity> Represents one database table has Attributes inside tage<> -->
+<!--  <field> Represents one column in the table has Attributes inside tage<> -->
+<!--  <data> Represents Sample data or initial values, Contains <value> elements with actual data & has Attributes-->
+
+<entities>
+
+
+    <entity name="DisabilityAssessment"
+            table="HRSD_DISABILITY_ASSESSMENT_INT_old"
+            schema="dbo">
+
+        <fields>
+
+            <field name="nationalId" column="national_id" />
+
+            <field name="firstName" column="first_name" />
+
+            <field name="dob" column="dob"/>
+
+            <field name="cityCode" column="city_code" />
+
+            <field name="mobileNumber" column="mobile" />
+
+            <field name="disabilityId" column="disability_id" />
+
+            <field name="disabilityType" column="disability_type" />
+
+            <field name="category" column="category"/>
+
+            <field name="iq" column="iq"/>
+
+            <field name="disabilityDate" column="disability_date"/>
+
+            <field name="expiredDate" column="expired_date"/>
+
+            <field name="disabilityDescriptionBeneficiary" column="dis_desc_benf"/>
+
+            <field name="failure" column="failure"/>
+
+            <field name="message" column="MESSAGE"/>
+        </fields>
+
+        <data>
+
+            <value field="nationalId">1234567890</value>
+            <value field="firstName">Ahmed Ali</value>
+            <value field="dob">1990-05-15</value>
+            <value field="cityCode">RUH</value>
+            <value field="mobileNumber">0501234567</value>
+            <value field="disabilityId">DIS001</value>
+            <!--                <value field="disabilityType">Physical</value>-->
+            <!--                <value field="category">Mobility</value>-->
+            <!--                <value field="iq">95</value>-->
+            <!--                <value field="disabilityDate">2020-01-15</value>-->
+            <value field="expiredDate">2025-01-15</value>
+            <value field="disabilityDescriptionBeneficiary">Lower limb disability</value>
+            <value field="failure">false</value>
+            <value field="message">Assessment completed successfully</value>
+
+
+        </data>
+        <data>
+
+            <value field="nationalId">1234567890</value>
+            <value field="firstName">Ahmed Ali</value>
+            <value field="dob">1990-05-15</value>
+            <value field="cityCode">RUH</value>
+            <value field="mobileNumber">0501234567</value>
+            <value field="disabilityId">DIS001</value>
+            <!--                <value field="disabilityType">Physical</value>-->
+            <!--                <value field="category">Mobility</value>-->
+            <!--                <value field="iq">95</value>-->
+            <!--                <value field="disabilityDate">2020-01-15</value>-->
+            <value field="expiredDate">2025-01-15</value>
+            <value field="disabilityDescriptionBeneficiary">Lower limb disability</value>
+            <value field="failure">false</value>
+            <value field="message">Assessment completed successfully</value>
+        </data>
+
+        <data>
+
+            <value field="nationalId">1234567890</value>
+            <value field="firstName">Ahmed Ali</value>
+            <value field="dob">1990-05-15</value>
+            <value field="cityCode">RUH</value>
+            <value field="mobileNumber">0501234567</value>
+            <value field="disabilityId">DIS001</value>
+            <!--                <value field="disabilityType">Physical</value>-->
+            <!--                <value field="category">Mobility</value>-->
+            <!--                <value field="iq">95</value>-->
+            <!--                <value field="disabilityDate">2020-01-15</value>-->
+            <value field="expiredDate">2025-01-15</value>
+            <value field="disabilityDescriptionBeneficiary">Lower limb disability</value>
+            <value field="failure">false</value>
+            <value field="message">Assessment completed successfully</value>
+        </data>
+        <data>
+
+            <value field="nationalId">1234567890</value>
+            <value field="firstName">Ahmed Ali</value>
+            <value field="dob">1990-05-15</value>
+            <value field="cityCode">RUH</value>
+            <value field="mobileNumber">0501234567</value>
+            <value field="disabilityId">DIS001</value>
+            <!--                <value field="disabilityType">Physical</value>-->
+            <!--                <value field="category">Mobility</value>-->
+            <!--                <value field="iq">95</value>-->
+            <!--                <value field="disabilityDate">2020-01-15</value>-->
+            <value field="expiredDate">2025-01-15</value>
+            <value field="disabilityDescriptionBeneficiary">Lower limb disability</value>
+            <value field="failure">false</value>
+            <value field="message">Assessment completed successfully</value>
+        </data>
+        <data>
+
+            <value field="nationalId">1234567890</value>
+            <value field="firstName">Ahmed Ali</value>
+            <value field="dob">1990-05-15</value>
+            <value field="cityCode">RUH</value>
+            <value field="mobileNumber">0501234567</value>
+            <value field="disabilityId">DIS001</value>
+            <!--                <value field="disabilityType">Physical</value>-->
+            <!--                <value field="category">Mobility</value>-->
+            <!--                <value field="iq">95</value>-->
+            <!--                <value field="disabilityDate">2020-01-15</value>-->
+            <value field="expiredDate">2025-01-15</value>
+            <value field="disabilityDescriptionBeneficiary">Lower limb disability</value>
+            <value field="failure">false</value>
+            <value field="message">Assessment completed successfully</value>
+        </data>
+
+
+    </entity>
+
+    <entity name="Scholarship"
+            table="SCHOLARSHIP_INT"
+            schema="dbo">
+
+        <fields>
+            <field name="instituteContactNumber" column="institute_contact_number"/>
+
+            <field name="scholarshipUniversityRecommendationStatusIdentification"
+                   column="scholarship_university_recommendation_status_identification"/>
+
+            <field name="academicDegreeIdentification"
+                   column="academic_degree_identification"/>
+
+            <field name="academicStudyFieldIdentification"
+                   column="academic_study_field_identification"/>
+
+            <field name="academicCourseMajorIdentification"
+                   column="academic_course_major_identification"/>
+
+            <field name="scholarshipInstituteCountryIdentification"
+                   column="scholarship_institute_country_identification"/>
+
+            <field name="studentGraduationDate"
+                   column="student_graduation_date"/>
+
+            <field name="academicInstitute"
+                   column="academic_institute"/>
+
+            <field name="scholarshipEndDate"
+                   column="scholarship_end_date"/>
+
+            <field name="scholarshipStartDate"
+                   column="scholarship_start_date"/>
+
+            <field name="studentCompanionRelationship"
+                   column="student_companion_relationship"/>
+
+            <field name="scholarshipSponsorIdentification"
+                   column="scholarship_sponsor_identification"/>
+
+            <field name="certificateAccreditationStatusIdentification"
+                   column="certificate_accreditation_status_identification"/>
+
+            <field name="scholarshipDecisionDate"
+                   column="scholarship_decision_date"/>
+
+            <field name="scholarshipStatusIdentification"
+                   column="scholarship_status_identification"/>
+
+            <field name="scholarshipStipendEndDate"
+                   column="scholarship_stipend_end_date"/>
+
+            <field name="scholarshipStipendStartDate"
+                   column="scholarship_stipend_start_date"/>
+
+            <field name="studentInsuranceStatusFlag"
+                   column="student_insurance_status_flag"/>
+
+            <field name="scholarshipDecisionStartDate"
+                   column="scholarship_decision_start_date"/>
+
+            <field name="scholarshipDecisionNumber"
+                   column="scholarship_decision_number"/>
+
+            <field name="studentIdentificationNumber"
+                   column="student_identification_number"/>
+        </fields>
+
+    </entity>
+
+
+</entities>
+
+
+
