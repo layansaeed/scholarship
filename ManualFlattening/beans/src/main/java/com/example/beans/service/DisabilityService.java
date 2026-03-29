@@ -12,9 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -42,21 +44,18 @@ public class DisabilityService {
     }
 
     public Map<String, Object> callMockoon(Long nin) {
-        Map<String, Object> body = new LinkedHashMap<>();
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("nin", nin);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON)); // Java 8 replacement
 
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<Map<String, Object>>(body, headers);
 
         ResponseEntity<Map> response =
                 restTemplate.exchange(disabilityUrl, HttpMethod.POST, request, Map.class);
 
-//        System.out.println("Result is== ");
-//        System.out.println(response.getBody());
-//        System.out.println("");
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
             throw new RuntimeException("Disability Mockoon failed. status=" + response.getStatusCode());
         }
@@ -73,45 +72,59 @@ public class DisabilityService {
         return b.getNin();
     }
 
+    /**
+     * Calls Mockoon using the first NIN found in DB.
+     */
     public Map<String, Object> callMockoonWithOneNinFromDb() {
         return callMockoon(getOneNinFromDb());
     }
 
+    /**
+     * Inserts disability data for the first NIN in DB.
+     *
+     * @return inserted rows count
+     */
     public int insertForOneNin() {
         Long nin = getOneNinFromDb();
         return insertForSpecificNin(nin);
     }
 
     public int insertForSpecificNin(Long nin) {
-        EntityDefinition def = getEntityDefinitionOrThrow("DisabilityAssessment");
+        EntityDefinition def = requireEntity("DisabilityAssessment");
 
         Map<String, Object> response = callMockoon(nin);
-        Map<String, Object> row = mapMockoonResultToDisabilityRow(response);
 
-        EntityDefinition copy = buildEntityCopyWithRows(def, List.of(row));
-        return genericRepo.insertAllRows(copy);
+        Map<String, Object> row = normalizeRowByXml(def, response);
+
+        return genericRepo.insertAllRows(def, Collections.singletonList(row)); // Java 8 replacement
     }
 
+    /**
+     * Inserts disability data for ALL NINs in Beneficiary table.
+     *
+     * @return inserted rows count (equals number of NINs successfully processed)
+     */
     public int insertForAllNins() {
-        EntityDefinition def = getEntityDefinitionOrThrow("DisabilityAssessment");
+        EntityDefinition def = requireEntity("DisabilityAssessment");
 
         List<Long> nins = getAllNinsSorted();
         if (nins.isEmpty()) {
             throw new RuntimeException("No NINs found in Beneficiary table");
         }
 
-        List<Map<String, Object>> rows = new ArrayList<>();
+        List<Map<String, Object>> rows = new ArrayList<Map<String, Object>>(nins.size());
 
         for (Long nin : nins) {
             Map<String, Object> response = callMockoon(nin);
-            rows.add(mapMockoonResultToDisabilityRow(response));
+            rows.add(normalizeRowByXml(def, response));
         }
 
-        EntityDefinition copy = buildEntityCopyWithRows(def, rows);
-        return genericRepo.insertAllRows(copy);
+        return genericRepo.insertAllRows(def, rows);
     }
 
-    private EntityDefinition getEntityDefinitionOrThrow(String entityName) {
+    // -------------------- helpers --------------------
+
+    private EntityDefinition requireEntity(String entityName) {
         try {
             return registry.get(entityName);
         } catch (RuntimeException e) {
@@ -123,35 +136,16 @@ public class DisabilityService {
         return beneficiaryJpaRepository.findAll(Sort.by("nin"))
                 .stream()
                 .map(BeneficiaryEntity::getNin)
-                .toList();
+                .collect(Collectors.toList()); // Java 8 replacement for .toList()
     }
 
-    private Map<String, Object> mapMockoonResultToDisabilityRow(Map<String, Object> result) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("nationalId", result.get("nationalId"));
-        row.put("firstName", result.get("firstName"));
-        row.put("dob", result.get("dob"));
-        row.put("cityCode", result.get("cityCode"));
-        row.put("mobileNumber", result.get("mobileNumber"));
-        row.put("disabilityId", result.get("disabilityId"));
-        row.put("disabilityType", result.get("disabilityType"));
-        row.put("category", result.get("category"));
-        row.put("iq", result.get("iq"));
-        row.put("disabilityDate", result.get("disabilityDate"));
-        row.put("expiredDate", result.get("expiredDate"));
-        row.put("disabilityDescriptionBeneficiary", result.get("disabilityDescriptionBeneficiary"));
-        row.put("failure", result.getOrDefault("failure", "false"));
-        row.put("message", result.getOrDefault("message", null));
+    private Map<String, Object> normalizeRowByXml(EntityDefinition def, Map<String, Object> response) {
+        Map<String, Object> row = new LinkedHashMap<String, Object>();
+
+        for (String javaFieldName : def.getFieldMapping().keySet()) {
+            row.put(javaFieldName, response.get(javaFieldName));
+        }
+
         return row;
-    }
-
-    private EntityDefinition buildEntityCopyWithRows(EntityDefinition def, List<Map<String, Object>> rows) {
-        EntityDefinition copy = new EntityDefinition();
-        copy.setEntityName(def.getEntityName());
-        copy.setTableName(def.getTableName());
-        copy.setSchema(def.getSchema());
-        copy.setFieldMapping(def.getFieldMapping());
-        copy.setRows(rows);
-        return copy;
     }
 }

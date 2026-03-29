@@ -35,7 +35,7 @@ public class EntityDefinition {
      * @return fully-qualified table name including schema (dbo.TABLE) if schema is present.
      */
     public String getFullTableName() {
-        if (schema != null && !schema.isBlank()) {
+        if (schema != null && !schema.trim().isEmpty()) {
             return schema + "." + tableName;
         }
         return tableName;

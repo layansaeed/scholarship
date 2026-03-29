@@ -12,9 +12,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -48,14 +50,14 @@ public class ScholarshipService {
      * @return full JSON response as Map (contains scholarshipList and nested stageInformationList)
      */
     public Map<String, Object> callScholarshipApi(Long nin) {
-        Map<String, Object> body = new LinkedHashMap<>();
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("nin", nin);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<Map<String, Object>>(body, headers);
 
         ResponseEntity<Map> response =
                 restTemplate.exchange(scholarshipUrl, HttpMethod.POST, request, Map.class);
@@ -68,12 +70,7 @@ public class ScholarshipService {
         return response.getBody();
     }
 
-    /**
-     * Gets one NIN from Beneficiary table (smallest NIN).
-     * Useful for quick testing.
-     *
-     * @return one existing NIN
-     */
+    /** Gets the smallest NIN from Beneficiary table*/
     public Long getFirstNinFromDb() {
         BeneficiaryEntity b = beneficiaryRepo.findFirstByOrderByNinAsc();
         if (b == null) {
@@ -90,7 +87,7 @@ public class ScholarshipService {
      * - Scholarship (parent)
      * - ScholarshipStageInformation (child rows)
      * <p>
-     * The stage rows are enriched with:
+     * The stage rows are stored with:
      * - studentIdentificationNumber
      * - scholarshipRowId (parent row_id generated in Scholarship table)
      *
@@ -98,7 +95,6 @@ public class ScholarshipService {
      * @return insertion summary (scholarshipInserted, stageInserted, totalInserted)
      */
     public Map<String, Object> insertScholarshipForNin(Long nin) {
-
 
         EntityDefinition scholarshipDef = requireEntity("Scholarship");
         EntityDefinition stageDef = requireEntity("ScholarshipStageInformation");
@@ -109,15 +105,22 @@ public class ScholarshipService {
         //Split JSON into 2 sets of rows -> 2 tables
         List<Map<String, Object>> scholarships = extractScholarshipList(response);
 
+        // table 1 rows (remove nested list)
         List<Map<String, Object>> scholarshipRows = mapScholarshipsToRows(scholarships);
 
-        EntityDefinition scholarshipCopy = buildEntityCopyWithRows(scholarshipDef, scholarshipRows);
-        List<Long> scholarshipRowIds = genericRepo.insertAllRowsReturnIds(scholarshipCopy);
 
+      //  EntityDefinition scholarshipCopy = buildEntityCopyWithRows(scholarshipDef, scholarshipRows);
+     // List<Long> scholarshipRowIds = genericRepo.insertAllRowsReturnIds(scholarshipCopy);
+        // insert table 1 and return generated ids
+        List<Long> scholarshipRowIds = genericRepo.insertAllRowsReturnIds(scholarshipDef, scholarshipRows);
+
+        // table 2 rows (flatten children + add studentId + parent row_id)
         List<Map<String, Object>> stageRows = mapAllStagesToRows(scholarships, scholarshipRowIds);
 
-        EntityDefinition stageCopy = buildEntityCopyWithRows(stageDef, stageRows);
-        int stageInserted = genericRepo.insertAllRows(stageCopy);
+        // EntityDefinition stageCopy = buildEntityCopyWithRows(stageDef, stageRows);
+        // int stageInserted = genericRepo.insertAllRows(stageCopy);
+        // insert table 2
+        int stageInserted = genericRepo.insertAllRows(stageDef, stageRows);
 
         return buildInsertSummary(scholarshipRowIds.size(), stageInserted);
     }
@@ -131,6 +134,7 @@ public class ScholarshipService {
     public Map<String, Object> insertScholarshipForFirstNin() {
         return insertScholarshipForNin(getFirstNinFromDb());
     }
+
 
     /**
      * Loads all NINs from Beneficiary table (sorted) and runs the same logic for each one.
@@ -175,7 +179,8 @@ public class ScholarshipService {
         return beneficiaryRepo.findAll(Sort.by("nin"))
                 .stream()
                 .map(BeneficiaryEntity::getNin)
-                .toList();
+                .collect(Collectors.toList()); // Java 8
+        //java 17 -> .toList();
     }
 
     /**
@@ -184,37 +189,33 @@ public class ScholarshipService {
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> extractScholarshipList(Map<String, Object> response) {
         Object raw = response.get("scholarshipList");
-        if (!(raw instanceof List<?> list)) {
+        //java 17 -> (!(raw instanceof List<?> list)) & without List<?> list = (List<?>) raw;
+        if (!(raw instanceof List)) {
             throw new RuntimeException("Response does not contain a valid 'scholarshipList'");
         }
+        List<?> list = (List<?>) raw;
 
-        List<Map<String, Object>> result = new ArrayList<>();
+        List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
         for (Object item : list) {
-            if (!(item instanceof Map<?, ?> m)) {
+            if (!(item instanceof Map)) {
                 throw new RuntimeException("One item inside scholarshipList is not a valid JSON object");
             }
-            result.add((Map<String, Object>) m);
+            result.add((Map<String, Object>) item);
         }
-
-        //test
         return result;
     }
 
     /**
-     *
-     * Converts each scholarship object into a flat row map that matches XML field names and just has parent field without child
-     * for Scholarship table (parent) -> removing nested stage lis (stageInformationList )
+     * Parent rows (Scholarship table): copy scholarship object and remove stageInformationList.
      */
-
     private List<Map<String, Object>> mapScholarshipsToRows(List<Map<String, Object>> scholarships) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
         for (Map<String, Object> scholarship : scholarships) {
             Map<String, Object> row = new LinkedHashMap<>(scholarship); // copy JSON as-is
-            row.remove("stageInformationList");                         // remove nested child list
+            row.remove("stageInformationList");
             rows.add(row);
         }
-
         return rows;
     }
 
@@ -233,6 +234,7 @@ public class ScholarshipService {
 
             Long studentId = ((Number) scholarship.get("studentIdentificationNumber")).longValue();
             Long scholarshipRowId = scholarshipRowIds.get(i);
+
             rows.addAll(mapStagesToRows(scholarship, studentId, scholarshipRowId));
         }
         return rows;
@@ -250,28 +252,32 @@ public class ScholarshipService {
 
         Object rawStageList = scholarship.get("stageInformationList");
         if (rawStageList == null) {
-            return List.of();
+            // java 17 ->  return List.of();
+            return Collections.emptyList();
         }
-        if (!(rawStageList instanceof List<?> stageList)) {
+        if (!(rawStageList instanceof List)) {
             throw new RuntimeException("'stageInformationList' is not a valid JSON array");
         }
+
+        List<?> stageList = (List<?>) rawStageList;
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
         for (Object stageItem : stageList) {
-            if (!(stageItem instanceof Map<?, ?> rawStage)) {
+            if (!(stageItem instanceof Map)) {
                 throw new RuntimeException("One item inside stageInformationList is not a valid JSON object");
             }
 
-            Map<String, Object> stage = (Map<String, Object>) rawStage;
+            Map<String, Object> stage = (Map<String, Object>) stageItem;
 
             /**
              * edit stage and not create map copy-> modifying the original stage map
              * that came from the response (and still lives inside scholarship → stageInformationList).
              */
-            Map<String, Object> row = new LinkedHashMap<>(stage); // copy stage JSON as-is
+            Map<String, Object> row = new LinkedHashMap<>(stage);
             row.put("studentIdentificationNumber", studentId);
             row.put("scholarshipRowId", scholarshipRowId);
+
             rows.add(row);
         }
 
@@ -279,27 +285,27 @@ public class ScholarshipService {
     }
 
     /**
-     * Copies XML metadata (table/schema/mapping) and attaches runtime rows.
-     * We do this to avoid modifying the original EntityDefinition stored in registry.
-     */
-    private EntityDefinition buildEntityCopyWithRows(EntityDefinition def, List<Map<String, Object>> rows) {
-        EntityDefinition copy = new EntityDefinition();
-        copy.setEntityName(def.getEntityName());
-        copy.setTableName(def.getTableName());
-        copy.setSchema(def.getSchema());
-        copy.setFieldMapping(def.getFieldMapping());
-        copy.setRows(rows);
-        return copy;
-    }
-
-    /**
      * Builds a consistent response for controller.
      */
     private Map<String, Object> buildInsertSummary(int scholarshipInserted, int stageInserted) {
-        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("scholarshipInserted", scholarshipInserted);
         result.put("stageInserted", stageInserted);
         result.put("totalInserted", scholarshipInserted + stageInserted);
         return result;
     }
+
+    /**
+     * Copies XML metadata (table/schema/mapping) and attaches runtime rows.
+     * We do this to avoid modifying the original EntityDefinition stored in registry.
+     */
+//    private EntityDefinition buildEntityCopyWithRows(EntityDefinition def, List<Map<String, Object>> rows) {
+//        EntityDefinition copy = new EntityDefinition();
+//        copy.setEntityName(def.getEntityName());
+//        copy.setTableName(def.getTableName());
+//        copy.setSchema(def.getSchema());
+//        copy.setFieldMapping(def.getFieldMapping());
+//        copy.setRows(rows);
+//        return copy;
+//    }
 }

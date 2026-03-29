@@ -4,7 +4,7 @@ import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.GenericEntityRepository;
 import com.example.beans.service.EntityDefinitionRegistry;
 import com.example.beans.service.XMLBeanLoaderService;
-import jakarta.annotation.PostConstruct;
+import javax.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

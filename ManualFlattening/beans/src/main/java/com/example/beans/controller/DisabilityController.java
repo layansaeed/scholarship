@@ -15,14 +15,11 @@ public class DisabilityController {
     public DisabilityController(DisabilityService disabilityService) {
         this.disabilityService = disabilityService;
     }
-
     /**
+     * Calls Mockoon using the NIN you send manually.
+     * Returns API response only (no DB insert).
      *
-     *Calls Mockoon using the NIN you send manually.
-     * It only returns the API response.
-     * No insert into DB.
-     * @param nin
-     * @return
+     * POST /api/disability/mockoon?nin=1127613683
      */
     @PostMapping("/mockoon")
     public Map<String, Object> callMockoon(@RequestParam("nin") Long nin) {
@@ -30,10 +27,10 @@ public class DisabilityController {
     }
 
     /**
-     * Calls Mockoon using the NIN you send manually.
-     * It only returns the API response.
-     * No insert into DB.
-     * @return
+     * Calls Mockoon using the first NIN found in DB.
+     * Returns API response only (no DB insert).
+     *
+     * GET /api/disability/mockoon/from-db
      */
     @GetMapping("/mockoon/from-db")
     public Map<String, Object> callMockoonFromDb() {
@@ -41,59 +38,49 @@ public class DisabilityController {
     }
 
     /**
-     * Reads one NIN from your Beneficiary table, calls Mockoon, maps the response, then inserts it into DB.
-     * Insert happens for one NIN from DB.
-     * @return
+     * Inserts disability data for the first NIN in DB.
+     *
+     * POST /api/disability/insert/one
      */
     @PostMapping("/insert/one")
     public ResponseEntity<?> insertOne() {
         try {
-            return ResponseEntity.ok(disabilityService.insertForOneNin());
+            int inserted = disabilityService.insertForOneNin();
+            return ResponseEntity.ok(inserted);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
         }
     }
 
     /**
-     * Uses the NIN you send manually, calls Mockoon, maps the response, then inserts it into DB.
-     * Insert happens for the specific NIN you passed.
-     * @param nin
-     * @return
+     * Inserts disability data for the specific NIN you pass.
+     *
+     * POST /api/disability/insert?nin=1127613683
      */
     @PostMapping("/insert")
     public ResponseEntity<?> insertSpecific(@RequestParam("nin") Long nin) {
         try {
-            return ResponseEntity.ok(disabilityService.insertForSpecificNin(nin));
+            int inserted = disabilityService.insertForSpecificNin(nin);
+            return ResponseEntity.ok(inserted);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
         }
     }
 
     /**
-     * Reads all NINs from your Beneficiary table, calls Mockoon for each one, maps all responses, then inserts them into DB.
-     * Insert happens for all NINs in DB.
-     * @return
+     * Inserts disability data for ALL NINs in Beneficiary table.
+     *
+     * POST /api/disability/insert/all
      */
     @PostMapping("/insert/all")
     public ResponseEntity<?> insertAll() {
         try {
-            return ResponseEntity.ok(disabilityService.insertForAllNins());
+            int inserted = disabilityService.insertForAllNins();
+            return ResponseEntity.ok(inserted);
         } catch (RuntimeException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
         }
     }
 
-    /**
-     * Easy way to remember
-     *
-     * mockoon = test API only
-     *
-     * insert = API + mapping + DB insert
-     *
-     * from-db = take NIN from database
-     *
-     * ?nin=... = you send the NIN yourself
-     *
-     * all = run for every NIN in Beneficiary
-     */
+
 }
