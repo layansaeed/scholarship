@@ -179,6 +179,20 @@ public class ScholarshipService {
                 .collect(Collectors.toList());
 
     }
+    private List<?> requireList(Object raw, String errorMessage) {
+        if (!(raw instanceof List)) {
+            throw new RuntimeException(errorMessage);
+        }
+        return (List<?>) raw;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> requireMap(Object raw, String errorMessage) {
+        if (!(raw instanceof Map)) {
+            throw new RuntimeException(errorMessage);
+        }
+        return (Map<String, Object>) raw;
+    }
 
     /**
      * Extracts scholarshipList from response and ensures correct structure.
@@ -187,17 +201,11 @@ public class ScholarshipService {
     private List<Map<String, Object>> extractScholarshipList(Map<String, Object> response) {
         Object raw = response.get("scholarshipList");
 
-        if (!(raw instanceof List)) {
-            throw new RuntimeException("Response does not contain a valid 'scholarshipList'");
-        }
-        List<?> list = (List<?>) raw;
+        List<?> list = requireList(raw, "Response does not contain a valid 'scholarshipList'");
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Object item : list) {
-            if (!(item instanceof Map)) {
-                throw new RuntimeException("One item inside scholarshipList is not a valid JSON object");
-            }
-            result.add((Map<String, Object>) item);
+            result.add(requireMap(item, "One item inside scholarshipList is not a valid JSON object"));
         }
         return result;
     }
@@ -251,20 +259,13 @@ public class ScholarshipService {
         if (rawStageList == null) {
             return Collections.emptyList();
         }
-        if (!(rawStageList instanceof List)) {
-            throw new RuntimeException("'stageInformationList' is not a valid JSON array");
-        }
 
-        List<?> stageList = (List<?>) rawStageList;
+        List<?> stageList = requireList(rawStageList, "'stageInformationList' is not a valid JSON array");
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
         for (Object stageItem : stageList) {
-            if (!(stageItem instanceof Map)) {
-                throw new RuntimeException("One item inside stageInformationList is not a valid JSON object");
-            }
-
-            Map<String, Object> stage = (Map<String, Object>) stageItem;
+            Map<String, Object> stage = requireMap(stageItem, "One item inside stageInformationList is not a valid JSON object");
 
             /**
              * edit stage and not create map copy-> modifying the original stage map
