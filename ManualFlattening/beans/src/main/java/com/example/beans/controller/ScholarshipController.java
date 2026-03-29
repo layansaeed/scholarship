@@ -1,10 +1,8 @@
 package com.example.beans.controller;
 
-import com.example.beans.service.ScholarshipService;
+import com.example.beans.service.integration.ScholarshipService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/scholarship")

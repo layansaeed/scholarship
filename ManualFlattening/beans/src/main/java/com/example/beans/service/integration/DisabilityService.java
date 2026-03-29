@@ -1,9 +1,10 @@
-package com.example.beans.service;
+package com.example.beans.service.integration;
 
 import com.example.beans.model.BeneficiaryEntity;
 import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
+import com.example.beans.service.EntityDefinitionRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;

@@ -16,15 +16,12 @@ public class BeanJob {
 
     private final XMLBeanLoaderService xmlLoader;
     private final EntityDefinitionRegistry registry;
-    private final GenericEntityRepository genericRepo;
 
     public BeanJob(XMLBeanLoaderService xmlLoader,
-                   EntityDefinitionRegistry registry,
-                   GenericEntityRepository genericRepo) {
+                   EntityDefinitionRegistry registry) {
 
         this.xmlLoader = xmlLoader;
         this.registry = registry;
-        this.genericRepo = genericRepo;
     }
 
     /**

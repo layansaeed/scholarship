@@ -1,6 +1,6 @@
 package com.example.beans.controller;
 
-import com.example.beans.service.DisabilityService;
+import com.example.beans.service.integration.DisabilityService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

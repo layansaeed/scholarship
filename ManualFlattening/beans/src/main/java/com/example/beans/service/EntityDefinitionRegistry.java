@@ -51,12 +51,4 @@ public class EntityDefinitionRegistry {
         return Collections.unmodifiableMap(entities);
     }
 
-    /**
-     * List all loaded entity names.
-     *
-     * @return array of entity names
-     */
-    public String[] getAllNames() {
-        return entities.keySet().toArray(new String[0]);
-    }
 }

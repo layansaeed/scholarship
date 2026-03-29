@@ -82,21 +82,12 @@ public class XMLBeanLoaderService {
      * Parses one <entity> node into an {@link EntityDefinition}.
      */
     private EntityDefinition parseEntityElement(Element entityElement) {
-        String entityName = entityElement.getAttribute(ATTR_ENTITY_NAME);
-        String tableName = entityElement.getAttribute(ATTR_TABLE);
-        String schema = entityElement.getAttribute(ATTR_SCHEMA);
 
         Map<String, String> fieldMapping = parseFieldMapping(entityElement);
         List<Map<String, Object>> rows = parseRows(entityElement);
 
-        EntityDefinition def = new EntityDefinition();
-        def.setEntityName(entityName);
-        def.setTableName(tableName);
-        def.setSchema(schema);
-        def.setFieldMapping(fieldMapping);
-        def.setRows(rows);
-
-        return def;
+        return new EntityDefinition(entityElement.getAttribute(ATTR_ENTITY_NAME),entityElement.getAttribute(ATTR_TABLE),
+                entityElement.getAttribute(ATTR_SCHEMA), fieldMapping,rows  );
     }
 
     /**
@@ -136,7 +127,6 @@ public class XMLBeanLoaderService {
             Element dataElement = (Element) dataNodes.item(i);
             rows.add(parseOneRow(dataElement));
         }
-
         return rows;
     }
 
@@ -150,11 +140,10 @@ public class XMLBeanLoaderService {
 
         for (int j = 0; j < valueNodes.getLength(); j++) {
             Element valueElement = (Element) valueNodes.item(j);
-            String fieldName = valueElement.getAttribute(ATTR_VALUE_FIELD);
-            String valueStr = valueElement.getTextContent();
-            row.put(fieldName, valueStr);
-        }
 
+            row.put(valueElement.getAttribute(ATTR_VALUE_FIELD)/*fieldName*/,
+                    valueElement.getTextContent()/*valueStr*/);
+        }
         return row;
     }
 }

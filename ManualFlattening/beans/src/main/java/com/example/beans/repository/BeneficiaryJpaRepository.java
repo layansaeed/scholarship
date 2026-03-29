@@ -11,6 +11,5 @@ public interface BeneficiaryJpaRepository extends JpaRepository<BeneficiaryEntit
 
     BeneficiaryEntity findFirstByOrderByNinAsc();
 
-    List<BeneficiaryEntity> findAllByOrderByNinAsc();
 
 }

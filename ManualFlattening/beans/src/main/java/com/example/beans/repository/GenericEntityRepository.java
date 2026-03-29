@@ -24,14 +24,7 @@ public class GenericEntityRepository {
     }
 
     /**
-     * Inserts all rows for a given entity definition (metadata is from XML),
-     * but the runtime rows are passed as a parameter (not stored inside EntityDefinition).
-     *
-     * This keeps EntityDefinition immutable-ish (metadata only) and avoids per-request copies.
-     *
-     * @param entity EntityDefinition loaded from XML (table/schema/fieldMapping)
-     * @param rows   runtime rows (each map key = javaFieldName from XML)
-     * @return number of inserted rows
+     * Inserts all rows and returns count only.
      */
     @Transactional
     public int insertAllRows(EntityDefinition entity, List<Map<String, Object>> rows) {
@@ -46,45 +39,14 @@ public class GenericEntityRepository {
             return 0;
         }
 
-        // 1) Create insert object ONCE
-        SimpleJdbcInsert insert = new SimpleJdbcInsert(jdbcTemplate)
-                .withTableName(entity.getTableName());
+        insertRowsInternal(entity, rows, false);
 
-        if (entity.getSchema() != null && !entity.getSchema().trim().isEmpty()) {
-            insert = insert.withSchemaName(entity.getSchema());
-        }
-
-        // 2) Configure columns ONCE (before first execute)
-        String[] columns = entity.getFieldMapping().values().toArray(new String[0]);
-        insert = insert.usingColumns(columns);
-
-        // 3) Configure generated key column ONCE (safe even if we don't return it)
-        insert = insert.usingGeneratedKeyColumns("row_id");
-
-        // 4) Execute for each row (NO MORE configuration changes)
-        int inserted = 0;
-
-        for (int i = 0; i < rowsCount; i++) {
-            Map<String, Object> rowData = rows.get(i);
-            Map<String, Object> values = buildInsertValues(entity, rowData);
-
-            insert.execute(values); // no key returned
-
-            inserted++;
-            log.info("Inserted row {}/{} for entity '{}'",
-                    i + 1, rowsCount, entity.getEntityName());
-        }
-
-        log.info("Finished entity '{}': inserted {} row(s).", entity.getEntityName(), inserted);
-        return inserted;
+        log.info("Finished entity '{}': inserted {} row(s).", entity.getEntityName(), rowsCount);
+        return rowsCount;
     }
 
     /**
-     * Inserts all rows for a given entity definition and returns the generated row_id for each inserted row.
-     *
-     * @param entity EntityDefinition loaded from XML (table/schema/fieldMapping)
-     * @param rows   runtime rows (each map key = javaFieldName from XML)
-     * @return list of generated row_id values (one per inserted row)
+     * Inserts all rows and returns generated row_id values.
      */
     @Transactional
     public List<Long> insertAllRowsReturnIds(EntityDefinition entity, List<Map<String, Object>> rows) {
@@ -99,34 +61,7 @@ public class GenericEntityRepository {
             return Collections.emptyList();
         }
 
-        // 1) Create insert object ONCE
-        SimpleJdbcInsert insert = new SimpleJdbcInsert(jdbcTemplate)
-                .withTableName(entity.getTableName());
-
-        if (entity.getSchema() != null && !entity.getSchema().trim().isEmpty()) {
-            insert = insert.withSchemaName(entity.getSchema());
-        }
-
-        // 2) Configure columns ONCE
-        String[] columns = entity.getFieldMapping().values().toArray(new String[0]);
-        insert = insert.usingColumns(columns);
-
-        // 3) Configure generated key column ONCE
-        insert = insert.usingGeneratedKeyColumns("row_id");
-
-        // 4) Execute for each row and collect ids
-        List<Long> generatedIds = new ArrayList<>(rowsCount);
-
-        for (int i = 0; i < rowsCount; i++) {
-            Map<String, Object> rowData = rows.get(i);
-            Map<String, Object> values = buildInsertValues(entity, rowData);
-
-            Number id = insert.executeAndReturnKey(values);
-            generatedIds.add(id.longValue());
-
-            log.info("Inserted row {}/{} for entity '{}' -> generated row_id={}",
-                    i + 1, rowsCount, entity.getEntityName(), id);
-        }
+        List<Long> generatedIds = insertRowsInternal(entity, rows, true);
 
         log.info("Finished entity '{}': inserted {} row(s). Returned {} row_id(s).",
                 entity.getEntityName(), rowsCount, generatedIds.size());
@@ -135,22 +70,59 @@ public class GenericEntityRepository {
     }
 
     /**
-     * Converts one runtime row (keys = javaFieldName) into DB insert values (keys = dbColumnName),
-     * based on the mapping loaded from XML.
-     *
-     * @param entity  EntityDefinition metadata (fieldMapping)
-     * @param rowData one runtime row, keyed by javaFieldName
-     * @return map keyed by DB column names, ready for SimpleJdbcInsert
+     * Shared insert logic for both public methods.
+     * If returnIds = true, returns generated row_id values.
+     * If returnIds = false, returns empty list.
+     */
+    private List<Long> insertRowsInternal(EntityDefinition entity,
+                                          List<Map<String, Object>> rows,
+                                          boolean returnIds) {
+
+        int rowsCount = rows.size();
+
+        SimpleJdbcInsert insert = new SimpleJdbcInsert(jdbcTemplate)
+                .withTableName(entity.getTableName());
+
+        if (entity.getSchema() != null && !entity.getSchema().trim().isEmpty()) {
+            insert = insert.withSchemaName(entity.getSchema());
+        }
+
+        String[] columns = entity.getFieldMapping().values().toArray(new String[0]);
+        insert = insert.usingColumns(columns);
+        insert = insert.usingGeneratedKeyColumns("row_id");
+
+        List<Long> generatedIds = returnIds ? new ArrayList<Long>(rowsCount) : Collections.<Long>emptyList();
+
+        for (int i = 0; i < rowsCount; i++) {
+            Map<String, Object> rowData = rows.get(i);
+            Map<String, Object> values = buildInsertValues(entity, rowData);
+
+            if (returnIds) {
+                Number id = insert.executeAndReturnKey(values);
+                generatedIds.add(id.longValue());
+
+                log.info("Inserted row {}/{} for entity '{}' -> generated row_id={}",
+                        i + 1, rowsCount, entity.getEntityName(), id);
+            } else {
+                insert.execute(values);
+
+                log.info("Inserted row {}/{} for entity '{}'",
+                        i + 1, rowsCount, entity.getEntityName());
+            }
+        }
+
+        return generatedIds;
+    }
+
+    /**
+     * Converts one runtime row (keys = javaFieldName) into DB insert values (keys = dbColumnName).
      */
     private Map<String, Object> buildInsertValues(EntityDefinition entity, Map<String, Object> rowData) {
         Map<String, Object> values = new LinkedHashMap<>();
 
         for (Map.Entry<String, String> entry : entity.getFieldMapping().entrySet()) {
-            String javaFieldName = entry.getKey();
-            String dbColumnName = entry.getValue();
-
-            Object value = rowData.get(javaFieldName);
-            values.put(dbColumnName, value);
+            Object value = rowData.get(entry.getKey());
+            values.put(entry.getValue(), value);
         }
 
         return values;
