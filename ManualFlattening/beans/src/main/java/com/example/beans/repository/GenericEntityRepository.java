@@ -91,7 +91,7 @@ public class GenericEntityRepository {
         insert = insert.usingColumns(columns);
         insert = insert.usingGeneratedKeyColumns("row_id");
 
-        List<Long> generatedIds = returnIds ? new ArrayList<Long>(rowsCount) : Collections.<Long>emptyList();
+        List<Long> generatedIds = returnIds ? new ArrayList<>(rowsCount) : Collections.<Long>emptyList();
 
         for (int i = 0; i < rowsCount; i++) {
             Map<String, Object> rowData = rows.get(i);

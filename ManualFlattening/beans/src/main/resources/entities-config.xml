@@ -6,10 +6,9 @@
 
     <entities>
 
-
-    <entity name="DisabilityAssessment"
-            table="HRSD_DISABILITY_ASSESSMENT_INT_old"
-            schema="dbo">
+    <entity name="HRSD_DIS_ASS"
+            table="HRSD_Disability_Assessment_Service"
+            schema="nrd">
 
             <fields>
 
@@ -46,24 +45,25 @@
     </entity>
 
     <!-- Beneficiary Entity -->
-    <entity name="Beneficiary"
-            table="SERVICES_ANALYTICS_TABLE_INT"
-            schema="dbo">
+    <entity name="HRDF_BENF_INQ"
+           table="BENEF_NINS" schema="ETL">
+
+    <!--            table="SERVICES_ANALYTICS_TABLE_INT"-->
 
         <fields>
             <field name="nin"
-                   column="BEN_ID"/>
+                   column="nin"/>
 
-            <field name="birthDate"
-                   column="DOB"/>
+<!--            <field name="birthDate"-->
+<!--                   column="DOB"/>-->
 
         </fields>
 
     </entity>
 
-    <entity name="Scholarship"
+    <entity name="SCHOLARSHIP"
             table="SCHOLARSHIP_INT"
-            schema="dbo">
+            schema="nrd">
 
         <fields>
             <field name="instituteContactNumber" column="institute_contact_number"/>
@@ -113,7 +113,7 @@
 
     <entity name="ScholarshipStageInformation"
             table="SCHOLARSHIP_STAGE_INFO_INT"
-            schema="dbo">
+            schema="nrd">
 
         <fields>
             <field name="studentIdentificationNumber" column="student_identification_number" />

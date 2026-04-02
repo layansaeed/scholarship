@@ -11,13 +11,13 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "SERVICES_ANALYTICS_TABLE_INT", schema = "dbo")
+@Table(name = "BENEF_NINS", schema = "ETL")
 public class BeneficiaryEntity {
 
     @Id
-    @Column(name = "BEN_ID")
+    @Column(name = "nin")
     private Long nin;
 
-    @Column(name = "DOB")
-    private String birthDate;
+//    @Column(name = "DOB")
+//    private String birthDate;
 }

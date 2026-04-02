@@ -1,14 +1,10 @@
 package com.example.beans.job;
 
-import com.example.beans.model.EntityDefinition;
-import com.example.beans.repository.GenericEntityRepository;
-import com.example.beans.service.EntityDefinitionRegistry;
-import com.example.beans.service.XMLBeanLoaderService;
+import com.example.beans.service.bean.EntityDefinitionRegistry;
+import com.example.beans.service.bean.XMLBeanLoaderService;
 import javax.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-
-import java.util.Map;
 
 @Slf4j
 @Component

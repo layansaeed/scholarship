@@ -1,4 +1,4 @@
-package com.example.beans.service;
+package com.example.beans.service.bean;
 
 import com.example.beans.model.EntityDefinition;
 import org.springframework.stereotype.Component;
@@ -24,7 +24,12 @@ public class EntityDefinitionRegistry {
      * @param def entity definition parsed from XML
      */
     public void put(EntityDefinition def) {
-        entities.put(def.getEntityName(), def);
+        String entityName = def.getEntityName();
+
+        if (entities.containsKey(entityName)) {
+            throw new IllegalStateException("Duplicate entity name found in XML: " + entityName);
+        }
+        entities.put(entityName, def);
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.example.beans.service;
+package com.example.beans.service.bean;
 
 import com.example.beans.model.EntityDefinition;
 import lombok.extern.slf4j.Slf4j;
@@ -135,7 +135,7 @@ public class XMLBeanLoaderService {
      * Keys are XML field names; values are stored as String.
      */
     private Map<String, Object> parseOneRow(Element dataElement) {
-        Map<String, Object> row = new HashMap<>();
+        Map<String, Object> row = new LinkedHashMap<>();
         NodeList valueNodes = dataElement.getElementsByTagName(TAG_VALUE);
 
         for (int j = 0; j < valueNodes.getLength(); j++) {

@@ -9,7 +9,7 @@ import java.util.Map;
 
 /**
  * One entity definition loaded from XML.
- *
+ *EntityDefinition is a plain Java model class used for XML-driven metadata and JDBC-based dynamic insert logic.
  * Meaning:
  * - entityName: logical name (used as registry key)
  * - tableName/schema: where to insert in DB
