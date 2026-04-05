@@ -15,16 +15,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * ParallelNinProcessorService is a Spring @Service, so usually it is a singleton.
- * That means all requests share the same object, and therefore share the same pageNumber.
- * pageNumber is used only by the main loop thread inside one method call-> It is not shared by worker threads.
- * Different insert logic per service: some services insert one row, some services insert parent + child rows
- * some services need returned generated ids. So it is better that each strategy handles its own save logic.
- *That is why my design uses:
- * shared threading service for parallelism
- * separate strategy class for business logic
- */
 @Slf4j
 @Service
 public class ParallelNinProcessorService {
@@ -39,18 +29,20 @@ public class ParallelNinProcessorService {
         this.executorService = Executors.newFixedThreadPool(threadCount);
         this.chunkSize = chunkSize;
     }
-//choose strategy → process NIN in parallel → each thread saves its own result()
+
     public void processInParallel(IntegrationStrategy strategy) {
         String strategyName = strategy.getClass().getSimpleName();
         int pageNumber = 0;
 
         log.info("Starting parallel processing for strategy={}", strategyName);
 
-        //Main loop thread
+        //first time
+        //page 0 loaded
+        //25 beneficiaries in the page
         while (true) {
             Page<BeneficiaryEntity> page =
                     strategy.getBeneficiaryRepo()
-                            .findAllByOrderByNinAsc(PageRequest.of(pageNumber, chunkSize));
+                            .findAllByOrderByNinAsc(PageRequest.of(pageNumber, chunkSize)); //25 nin
 
             if (!page.hasContent()) {
                 log.info("No more beneficiaries to process for strategy={}", strategyName);
@@ -60,25 +52,38 @@ public class ParallelNinProcessorService {
             log.info("Processing page {} for strategy={} with {} beneficiary record(s)",
                     pageNumber, strategyName, page.getNumberOfElements());
 
-            List<CompletableFuture<Void>> futures = new ArrayList<CompletableFuture<Void>>();
+            List<CompletableFuture<Object>> futures = new ArrayList<CompletableFuture<Object>>();
 
             for (BeneficiaryEntity beneficiary : page.getContent()) {
                 final Long nin = beneficiary.getNin();
-//It creates one task per NIN, but those tasks are executed by a fixed-size thread pool.
-                futures.add(CompletableFuture.runAsync(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            strategy.insertForNin(nin);
-                        } catch (Exception e) {
-                            log.error("Failed processing NIN={} in strategy={}. Error={}",
-                                    nin, strategyName, e.getMessage(), e);
-                        }
+
+                futures.add(CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return strategy.prepareForNin(nin);
+                    } catch (Exception e) {
+                        log.error("Failed processing NIN={} in strategy={}. Error={}",
+                                nin, strategyName, e.getMessage(), e);
+                        return null;
                     }
                 }, executorService));
             }
 
+            //do not save immediately when one thread finishes-> wait until all 25 NINs in the page finish preparing
+            //Only after that, the processor collects all returned objects into pageResults.
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            List<Object> pageResults = new ArrayList<Object>();
+            for (CompletableFuture<Object> future : futures) {
+                Object result = future.join();
+                if (result != null) {
+                    pageResults.add(result);
+                }
+            }
+
+            if (!pageResults.isEmpty()) {
+                strategy.saveBatch(pageResults);
+            }
+
             pageNumber++;
         }
 

@@ -5,9 +5,15 @@ import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.service.bean.EntityDefinitionRegistry;
 import com.example.beans.service.job.ParallelNinProcessorService;
 
+import java.util.List;
+
 public interface IntegrationStrategy {
 
-    void insertForNin(Long nin);
+    //thread prepares data only
+    Object prepareForNin(Long nin);
+
+    //after whole page finishes, save once
+    void saveBatch(List<Object> pageResults);
 
     BeneficiaryJpaRepository getBeneficiaryRepo();
 
