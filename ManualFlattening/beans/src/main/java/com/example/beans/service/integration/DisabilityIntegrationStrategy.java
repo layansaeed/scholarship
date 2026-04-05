@@ -1,9 +1,11 @@
 package com.example.beans.service.integration;
 
+import com.example.beans.constant.IntegrationType;
 import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
 import com.example.beans.service.bean.EntityDefinitionRegistry;
+import com.example.beans.service.job.ParallelNinProcessorService;
 import com.example.beans.service.pattern.IntegrationStrategy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +22,7 @@ import java.util.Map;
 @Service
 public class DisabilityIntegrationStrategy implements IntegrationStrategy {
 
+    private final ParallelNinProcessorService parallelNinProcessorService;
     private final RestTemplate restTemplate;
     private final BeneficiaryJpaRepository beneficiaryRepo;
     private final EntityDefinitionRegistry registry;
@@ -27,12 +30,13 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
     private final String disabilityUrl;
 
     public DisabilityIntegrationStrategy(
-            RestTemplate restTemplate,
+            ParallelNinProcessorService parallelNinProcessorService, RestTemplate restTemplate,
             BeneficiaryJpaRepository beneficiaryRepo,
             EntityDefinitionRegistry registry,
             GenericEntityRepository genericRepo,
             @Value("${hrsd.disability_assessment.url}") String disabilityUrl
     ) {
+        this.parallelNinProcessorService = parallelNinProcessorService;
         this.restTemplate = restTemplate;
         this.beneficiaryRepo = beneficiaryRepo;
         this.registry = registry;
@@ -60,12 +64,17 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
 //
 //        genericRepo.insertAllRows(def, Collections.singletonList(row));
 //    }
+
+    @Override
+    public ParallelNinProcessorService getParallelNinProcessorService() {
+        return parallelNinProcessorService;
+    }
     @Override
     @Transactional
     public void insertForNin(Long nin) {
         log.info("insertForNin started for NIN={}", nin);
 
-        EntityDefinition def = requireEntity("HRSD_DIS_ASS");
+        EntityDefinition def = requireEntity(IntegrationType.HRSD_DIS_ASS.name());
         log.info("Entity loaded: {}", def.getFullTableName());
 
         Map<String, Object> response = callApi(nin);

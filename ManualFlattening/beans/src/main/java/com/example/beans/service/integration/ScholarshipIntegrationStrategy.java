@@ -1,9 +1,11 @@
 package com.example.beans.service.integration;
 
+import com.example.beans.constant.IntegrationType;
 import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
 import com.example.beans.service.bean.EntityDefinitionRegistry;
+import com.example.beans.service.job.ParallelNinProcessorService;
 import com.example.beans.service.pattern.IntegrationStrategy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +24,7 @@ import java.util.Map;
 @Service
 public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
 
+    private final ParallelNinProcessorService parallelNinProcessorService;
     private final RestTemplate restTemplate;
     private final BeneficiaryJpaRepository beneficiaryRepo;
     private final EntityDefinitionRegistry registry;
@@ -29,12 +32,13 @@ public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
     private final String scholarshipUrl;
 
     public ScholarshipIntegrationStrategy(
-            RestTemplate restTemplate,
+            ParallelNinProcessorService parallelNinProcessorService, RestTemplate restTemplate,
             BeneficiaryJpaRepository beneficiaryRepo,
             EntityDefinitionRegistry registry,
             GenericEntityRepository genericRepo,
             @Value("${hrsd.scholarship.url}") String scholarshipUrl
     ) {
+        this.parallelNinProcessorService = parallelNinProcessorService;
         this.restTemplate = restTemplate;
         this.beneficiaryRepo = beneficiaryRepo;
         this.registry = registry;
@@ -51,11 +55,15 @@ public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
     public EntityDefinitionRegistry getRegistry() {
         return registry;
     }
+    @Override
+    public ParallelNinProcessorService getParallelNinProcessorService() {
+        return parallelNinProcessorService;
+    }
 
     @Override
     @Transactional
     public void insertForNin(Long nin) {
-        EntityDefinition scholarshipDef = requireEntity("SCHOLARSHIP");
+        EntityDefinition scholarshipDef = requireEntity(IntegrationType.SCHOLARSHIP.name());
         log.info("Entity loaded: {}", scholarshipDef.getFullTableName());
         EntityDefinition stageDef = requireEntity("ScholarshipStageInformation");
         log.info("Entity loaded: {}", scholarshipDef.getFullTableName());
