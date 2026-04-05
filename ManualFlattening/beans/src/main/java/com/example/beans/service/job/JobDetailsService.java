@@ -18,20 +18,19 @@ import java.util.Set;
 @Service
 public class JobDetailsService {
 
+    private final JobAuditService jobAuditService;
     private final JobDetailsJpaRepository jobRepository;
-    private final JobExecutionAuditJpaRepository auditRepository;
     private final IntegrationStrategyFactory strategyFactory;
 
-    public JobDetailsService(JobDetailsJpaRepository jobRepository,
-                             JobExecutionAuditJpaRepository auditRepository,
+    public JobDetailsService(JobAuditService jobAuditService, JobDetailsJpaRepository jobRepository,
                              IntegrationStrategyFactory strategyFactory) {
+        this.jobAuditService = jobAuditService;
         this.jobRepository = jobRepository;
-        this.auditRepository = auditRepository;
         this.strategyFactory = strategyFactory;
     }
 
     public JobExecutionAuditEntity getAuditRequired(Long id) {
-        return auditRepository.findById(id)
+        return jobAuditService.getAudit(id)
                 .orElseThrow(() -> new RuntimeException("Audit not found for id: " + id));
     }
 
@@ -48,7 +47,7 @@ public class JobDetailsService {
         strategyFactory.getStrategy(type).insertForAllNins();
     }
 
-    public void runJobsByAuditIds(List<Long> auditIds,Long nin) {
+    public void runJobsByAuditIds(List<Long> auditIds) {
         if (auditIds == null || auditIds.isEmpty()) {
             throw new RuntimeException("Audit id list is empty");
         }
@@ -59,7 +58,7 @@ public class JobDetailsService {
         List<JobDetailsEntity> sortedJobs = sortJobsByPriority(jobs);
         log.info("000000000000000000000[After sorting]0000000000000000000000");
         sortedJobs.forEach(System.out::println);
-        executeJobs(sortedJobs,nin);
+        executeJobs(sortedJobs);
     }
 
     private List<JobDetailsEntity> loadJobsFromAuditIds(List<Long> auditIds) {
@@ -96,7 +95,7 @@ public class JobDetailsService {
     }
 
     //This version runs each strategy once only even if the same job appears multiple times in the audit list.
-    private void executeJobs(List<JobDetailsEntity> jobs,Long nin) {
+    private void executeJobs(List<JobDetailsEntity> jobs) {
         Set<IntegrationType> executedTypes = new LinkedHashSet<>();
 
         for (JobDetailsEntity job : jobs) {
