@@ -9,10 +9,8 @@ import java.util.List;
 
 public interface IntegrationStrategy {
 
-    //thread prepares data only
     Object prepareForNin(Long nin);
 
-    //after whole page finishes, save once
     void saveBatch(List<Object> pageResults);
 
     BeneficiaryJpaRepository getBeneficiaryRepo();
@@ -21,8 +19,8 @@ public interface IntegrationStrategy {
 
     ParallelNinProcessorService getParallelNinProcessorService();
 
-    default void insertForAllNins() {
-        getParallelNinProcessorService().processInParallel(this);
+    default void insert(Long start, Long end) {
+        getParallelNinProcessorService().processInParallel(this, start, end);
     }
 
     default EntityDefinition requireEntity(String entityName) {

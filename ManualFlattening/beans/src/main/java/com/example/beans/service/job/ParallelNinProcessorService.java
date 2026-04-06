@@ -15,6 +15,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * This is the heart of normal-threading logic.
+ */
 @Slf4j
 @Service
 public class ParallelNinProcessorService {
@@ -30,20 +33,22 @@ public class ParallelNinProcessorService {
         this.chunkSize = chunkSize;
     }
 
-    public void processInParallel(IntegrationStrategy strategy) {
+    public void processInParallel(IntegrationStrategy strategy, Long start, Long end) {
         String strategyName = strategy.getClass().getSimpleName();
         int pageNumber = 0;
 
         log.info("Starting parallel processing for strategy={}", strategyName);
 
-        //first time
-        //page 0 loaded
-        //25 beneficiaries in the page
-        while (true) {
-            Page<BeneficiaryEntity> page =
-                    strategy.getBeneficiaryRepo()
-                            .findAllByOrderByNinAsc(PageRequest.of(pageNumber, chunkSize)); //25 nin
 
+        while (true) {
+            Page<BeneficiaryEntity> page;
+            if (start != null && end != null) {
+                page = strategy.getBeneficiaryRepo()
+                        .findBeneficiaries(PageRequest.of(pageNumber, chunkSize),start,end);
+            } else {
+                page = strategy.getBeneficiaryRepo()
+                        .findAllByOrderByNinAsc(PageRequest.of(pageNumber, chunkSize));
+            }
             if (!page.hasContent()) {
                 log.info("No more beneficiaries to process for strategy={}", strategyName);
                 break;
@@ -52,14 +57,15 @@ public class ParallelNinProcessorService {
             log.info("Processing page {} for strategy={} with {} beneficiary record(s)",
                     pageNumber, strategyName, page.getNumberOfElements());
 
-            List<CompletableFuture<Object>> futures = new ArrayList<CompletableFuture<Object>>();
+            //futures:store all async tasks of the current page:futures does not store the final data -> It stores task handles(objects that get the result later.).
 
+            List<CompletableFuture<Object>> futures = new ArrayList<>();
             for (BeneficiaryEntity beneficiary : page.getContent()) {
                 final Long nin = beneficiary.getNin();
 
-                futures.add(CompletableFuture.supplyAsync(() -> {
+                futures.add(CompletableFuture.supplyAsync(() -> { //Create an asynchronous task that returns a result.
                     try {
-                        return strategy.prepareForNin(nin);
+                        return strategy.prepareForNin(nin); //Thread prepares data only for each nin,It does not save directly.
                     } catch (Exception e) {
                         log.error("Failed processing NIN={} in strategy={}. Error={}",
                                 nin, strategyName, e.getMessage(), e);
@@ -67,26 +73,21 @@ public class ParallelNinProcessorService {
                     }
                 }, executorService));
             }
-
-            //do not save immediately when one thread finishes-> wait until all 25 NINs in the page finish preparing
-            //Only after that, the processor collects all returned objects into pageResults.
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-            List<Object> pageResults = new ArrayList<Object>();
+            List<Object> pageResults = new ArrayList<>();
             for (CompletableFuture<Object> future : futures) {
-                Object result = future.join();
+                Object result = future.join(); //final result of this async task
                 if (result != null) {
                     pageResults.add(result);
                 }
             }
 
             if (!pageResults.isEmpty()) {
+
                 strategy.saveBatch(pageResults);
             }
-
             pageNumber++;
         }
-
         log.info("Completed parallel processing for strategy={}", strategyName);
     }
 

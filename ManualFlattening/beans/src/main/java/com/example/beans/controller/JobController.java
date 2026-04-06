@@ -1,15 +1,17 @@
 package com.example.beans.controller;
 
+import com.example.beans.model.JobExecutorBatchRequest;
 import com.example.beans.service.job.JobDetailsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 
 @RestController
-@RequestMapping("/api/job")
+@RequestMapping("/v1/job-executor")
 public class JobController {
-
+    private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
     private final JobDetailsService jobService;
 
     public JobController(JobDetailsService jobService) {
@@ -29,44 +31,27 @@ public class JobController {
 //        }
 //    }
 
-    ////    //list of audit (sort strategy depend on priority column in job table)
-//    @PostMapping()
-//    public ResponseEntity<?> runJobsByAuditIds1(@RequestBody List<Long> auditIds, //{"auditIds": [2, 15]}
-//
-//     @PathVariable("nin") Long nin) {
-//        try {
-//            jobService.runJobsByAuditIds(auditIds,nin);
-//            return ResponseEntity.ok().build();
-//        } catch (Exception ex) {
-//            ex.printStackTrace();
-//            return ResponseEntity.badRequest().body(ex.getMessage());
-//        }
-//    }
-
-    //[2, 15]
-    @PostMapping("/forAll")
-    public ResponseEntity<?> runJobsByAuditIds2(@RequestBody List<Long> auditIds ) {
+    @PostMapping()
+    public ResponseEntity<?> runJobsByAuditIds2(@RequestBody JobExecutorBatchRequest auditIds ) {
         try {
-        jobService.runJobsByAuditIds(auditIds);
-        return ResponseEntity.ok().build();
-    } catch (Exception ex) {
-        ex.printStackTrace();
-        return ResponseEntity.badRequest().body(ex.getMessage());
+            System.out.println("audit id list size: " + auditIds.getJobs().size());
+            System.out.println("audit id list iterator: " + auditIds.getJobs().listIterator().toString());
+
+            jobService.runJobsByAuditIds(auditIds);
+            return ResponseEntity.ok().build();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
     }
-}
 
+        @GetMapping("/alive")
+        public ResponseEntity<?> alive() {
+            logger.info(" alive");
+//        String ip = request.getRemoteAddr();
+//        int port = request.getRemotePort();
+            logger.info("Alive check called ");
+            return ResponseEntity.ok().build();
+        }
 
-//POST /api/job/run/param?audit_ids=5,2,9
-//POST /api/job/run/param?audit_ids=5&audit_ids=2&audit_ids=9 -> is safer
-//@PostMapping("/{nin}")
-//public ResponseEntity<?> runJobsByAuditIds(@RequestParam("audit_ids") List<Long> auditIds,
-//                                           @PathVariable("nin") Long nin) {
-//    try {
-//        jobService.runJobsByAuditIds(auditIds,nin);
-//        return ResponseEntity.ok().build();
-//    } catch (Exception ex) {
-//        ex.printStackTrace();
-//        return ResponseEntity.badRequest().body(ex.getMessage());
-//    }
-//}
 }
