@@ -1,111 +1,112 @@
 package com.example.beans.service.job;
 
-import com.example.beans.constant.IntegrationType;
+import com.example.beans.constant.ExecutionStatus;
 import com.example.beans.model.JobDetailsEntity;
 import com.example.beans.model.JobExecutionAuditEntity;
+import com.example.beans.model.JobExecutorBatchRequest;
+import com.example.beans.model.JobExecutorRequest;
 import com.example.beans.repository.JobDetailsJpaRepository;
-import com.example.beans.repository.JobExecutionAuditJpaRepository;
+import com.example.beans.service.pattern.IntegrationStrategy;
 import com.example.beans.service.pattern.IntegrationStrategyFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
+
 @Slf4j
 @Service
 public class JobDetailsService {
 
+    private final JobAuditService jobAuditService;
     private final JobDetailsJpaRepository jobRepository;
-    private final JobExecutionAuditJpaRepository auditRepository;
     private final IntegrationStrategyFactory strategyFactory;
 
-    public JobDetailsService(JobDetailsJpaRepository jobRepository,
-                             JobExecutionAuditJpaRepository auditRepository,
+    public JobDetailsService(JobAuditService jobAuditService,
+                             JobDetailsJpaRepository jobRepository,
                              IntegrationStrategyFactory strategyFactory) {
+        this.jobAuditService = jobAuditService;
         this.jobRepository = jobRepository;
-        this.auditRepository = auditRepository;
         this.strategyFactory = strategyFactory;
     }
 
+    /**
+     * Returns the required audit row by audit id.
+     */
     public JobExecutionAuditEntity getAuditRequired(Long id) {
-        return auditRepository.findById(id)
+        return jobAuditService.getAudit(id)
                 .orElseThrow(() -> new RuntimeException("Audit not found for id: " + id));
     }
 
+    /**
+     * Returns the required job row by job id.
+     */
     public JobDetailsEntity getJobRequired(Long id) {
         return jobRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Job not found for id: " + id));
     }
 
-    public void runJobByAuditId(Long auditId,Long nin) {
-        JobExecutionAuditEntity audit = getAuditRequired(auditId);
-        JobDetailsEntity job = getJobRequired(audit.getJobId());
+    /**
+     * Loads audits, sorts them by job priority, then executes each audit
+     * using its own NIN range from the audit table.
+     */
+    public void runJobsByAuditIds(JobExecutorBatchRequest auditIds) {
 
-        IntegrationType type = job.getJobName();
-        strategyFactory.getStrategy(type).insertForAllNins();
-    }
-
-    public void runJobsByAuditIds(List<Long> auditIds,Long nin) {
-        if (auditIds == null || auditIds.isEmpty()) {
-            throw new RuntimeException("Audit id list is empty");
-        }
-
-        List<JobDetailsEntity> jobs = loadJobsFromAuditIds(auditIds);
-        log.info("000000000000000000000[Before sorting]0000000000000000000000");
-        jobs.forEach(System.out::println);
-        List<JobDetailsEntity> sortedJobs = sortJobsByPriority(jobs);
-        log.info("000000000000000000000[After sorting]0000000000000000000000");
-        sortedJobs.forEach(System.out::println);
-        executeJobs(sortedJobs,nin);
-    }
-
-    private List<JobDetailsEntity> loadJobsFromAuditIds(List<Long> auditIds) {
-        List<JobDetailsEntity> jobs = new ArrayList<>();
-
-        for (Long auditId : auditIds) {
-            JobExecutionAuditEntity audit = getAuditRequired(auditId);
-            JobDetailsEntity job = getJobRequired(audit.getJobId());
-            jobs.add(job);
-        }
-
-        return jobs;
+        List<JobExecutionAuditEntity> audits = loadAudits(auditIds);
+        sortAuditsByJobPriority(audits);
+        executeAudits(audits);
     }
 
     /**
-     * Job A → priority 3
-     * Job B → priority 1
-     * Job C → priority 2
-     *
-     * The list may come in this order:
-     * [Job A, Job B, Job C]
-     *
-     *It changes the same list object.
-     *It does not create a brand new list.
-     * So after sorting, jobs itself becomes ordered.
+     * Loads all audit rows for the given audit id list.
      */
-    private List<JobDetailsEntity> sortJobsByPriority(List<JobDetailsEntity> jobs) {
-        //3, null, 1, 2 ->  1, 2, 3, null ; null.compareTo(2) it crashes with NullPointerException.
-        //So nullsLast protects the sort when some priorities are missing.
-        jobs.sort(Comparator.comparing( //Java extracts priority using: JobDetailsEntity::getPriority -> job1.getPriority()  vs  job2.getPriority() -> 3 compare null
-                JobDetailsEntity::getPriority, Comparator.nullsLast(Integer::compareTo) //compare numbers
+    private List<JobExecutionAuditEntity> loadAudits(JobExecutorBatchRequest request) {
+        List<JobExecutionAuditEntity> audits = new ArrayList<>();
+
+        List<JobExecutorRequest> auditRequests = request.getJobs();
+
+        for (JobExecutorRequest auditRequest : auditRequests) {
+            Long auditId = auditRequest.getAuditId();
+            log.info("############ id={}", auditId);
+            audits.add(getAuditRequired(auditId));
+        }
+
+        return audits;
+    }
+    /**
+     * Sorts audit rows by the priority of their related job.
+     */
+    private void sortAuditsByJobPriority(List<JobExecutionAuditEntity> audits) {
+        audits.sort(Comparator.comparing(
+                audit -> getJobRequired(audit.getJob().getJobId()).getPriority(),
+                Comparator.nullsLast(Integer::compareTo)
         ));
-        return jobs;
     }
 
-    //This version runs each strategy once only even if the same job appears multiple times in the audit list.
-    private void executeJobs(List<JobDetailsEntity> jobs,Long nin) {
-        Set<IntegrationType> executedTypes = new LinkedHashSet<>();
+    /**
+     * Executes each audit separately using its own start/end NIN range.
+     */
+    private void executeAudits(List<JobExecutionAuditEntity> audits) {
+        for (JobExecutionAuditEntity audit : audits) {
+            JobDetailsEntity job = getJobRequired(audit.getJob().getJobId());
 
-        for (JobDetailsEntity job : jobs) {
-            IntegrationType type = job.getJobName();
+            Long start = audit.getNinRangeStart();
+            Long end = audit.getNinRangeEnd();
 
-            if (executedTypes.add(type)) {
-                strategyFactory.getStrategy(type).insertForAllNins();
-                //strategyFactory.getStrategy(type).insertForNin(nin);
+            if (start == null || end == null) {
+                throw new RuntimeException("NIN range start/end is missing for audit id: " + audit.getAuditId());
             }
+            jobAuditService.updateStatus(audit.getAuditId(), ExecutionStatus.PROCESSING);
+
+            IntegrationStrategy strategy = strategyFactory.getStrategy(job.getJobName());
+            //This is the line that moves from “job-level logic” into “parallel NIN-level logic”.
+            strategy.insert(start, end);
+
+            jobAuditService.updateStatus(audit.getAuditId(), ExecutionStatus.SUCCEEDED);
+
         }
     }
+
+
 }

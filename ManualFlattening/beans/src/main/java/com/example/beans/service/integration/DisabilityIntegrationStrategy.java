@@ -1,19 +1,22 @@
 package com.example.beans.service.integration;
 
+import com.example.beans.constant.IntegrationType;
 import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
 import com.example.beans.service.bean.EntityDefinitionRegistry;
+import com.example.beans.service.job.ParallelNinProcessorService;
 import com.example.beans.service.pattern.IntegrationStrategy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -24,6 +27,7 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
     private final BeneficiaryJpaRepository beneficiaryRepo;
     private final EntityDefinitionRegistry registry;
     private final GenericEntityRepository genericRepo;
+    private final ParallelNinProcessorService parallelNinProcessorService;
     private final String disabilityUrl;
 
     public DisabilityIntegrationStrategy(
@@ -31,12 +35,14 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
             BeneficiaryJpaRepository beneficiaryRepo,
             EntityDefinitionRegistry registry,
             GenericEntityRepository genericRepo,
+            ParallelNinProcessorService parallelNinProcessorService,
             @Value("${hrsd.disability_assessment.url}") String disabilityUrl
     ) {
         this.restTemplate = restTemplate;
         this.beneficiaryRepo = beneficiaryRepo;
         this.registry = registry;
         this.genericRepo = genericRepo;
+        this.parallelNinProcessorService = parallelNinProcessorService;
         this.disabilityUrl = disabilityUrl;
     }
 
@@ -50,37 +56,51 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
         return registry;
     }
 
-//    @Override
-//    @Transactional
-//    public void insertForNin(Long nin) {
-//        EntityDefinition def = requireEntity("HRSD_DIS_ASS");
-//
-//        Map<String, Object> response = callApi(nin);
-//        Map<String, Object> row = normalizeRowByXml(def, response);
-//
-//        genericRepo.insertAllRows(def, Collections.singletonList(row));
-//    }
     @Override
-    @Transactional
-    public void insertForNin(Long nin) {
-        log.info("insertForNin started for NIN={}", nin);
+    public ParallelNinProcessorService getParallelNinProcessorService() {
+        return parallelNinProcessorService;
+    }
 
-        EntityDefinition def = requireEntity("HRSD_DIS_ASS");
-        log.info("Entity loaded: {}", def.getFullTableName());
+    @Override
+    public Object prepareForNin(Long nin) {
+        log.info("Preparing disability data for NIN={}", nin);
 
+        EntityDefinition def = requireEntity(IntegrationType.HRSD_DIS_ASS.name());
         Map<String, Object> response = callApi(nin);
-        log.info("API response for NIN {} = {}", nin, response);
+        Map<String, Object> row = normalizeRowByXml(def, response); //normalize response to one row map
 
-        Map<String, Object> row = normalizeRowByXml(def, response);
-        log.info("Normalized row for NIN {} = {}", nin, row);
+        log.info("Prepared disability row for NIN={}", nin);
+        return row;
+    }
 
-        genericRepo.insertAllRows(def, Collections.singletonList(row));
+    @Override
+    @SuppressWarnings("unchecked")
+    public void saveBatch(List<Object> pageResults) {
+        EntityDefinition def = requireEntity(IntegrationType.HRSD_DIS_ASS.name());
 
-        log.info("Insert finished for NIN={}", nin);
+        List<Map<String, Object>> rows = new ArrayList<>();
+
+        for (Object result : pageResults) {
+            rows.add((Map<String, Object>) result);
+        }
+
+        if (rows.isEmpty()) {
+            log.info("No disability rows to save in this page");
+            return;
+        }
+        /**
+         * even though service saves once per page, repository still inserts rows one-by-one internally
+         * So:
+         * service layer = batch per page
+         * repository layer = loop per row
+         */
+        genericRepo.insertAllRows(def, rows);
+        log.info("Saved disability batch with {} row(s)", rows.size());
     }
 
     private Map<String, Object> callApi(Long nin) {
         log.info("Calling disability API for NIN {}", nin);
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nin", nin);
 
@@ -89,7 +109,7 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
         HttpEntity<Map<String, Object>> request =
-                new HttpEntity<Map<String, Object>>(body, headers);
+                new HttpEntity<>(body, headers);
 
         ResponseEntity<Map> response =
                 restTemplate.exchange(disabilityUrl, HttpMethod.POST, request, Map.class);
@@ -103,7 +123,7 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
     }
 
     private Map<String, Object> normalizeRowByXml(EntityDefinition def, Map<String, Object> response) {
-        Map<String, Object> row = new LinkedHashMap<String, Object>();
+        Map<String, Object> row = new LinkedHashMap<>();
 
         for (String javaFieldName : def.getFieldMapping().keySet()) {
             row.put(javaFieldName, response.get(javaFieldName));
