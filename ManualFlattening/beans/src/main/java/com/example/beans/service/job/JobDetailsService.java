@@ -7,7 +7,7 @@ import com.example.beans.model.JobExecutorBatchRequest;
 import com.example.beans.model.JobExecutorRequest;
 import com.example.beans.repository.JobDetailsJpaRepository;
 import com.example.beans.service.pattern.IntegrationStrategy;
-import com.example.beans.service.pattern.IntegrationStrategyFactory;
+import com.example.beans.service.pattern.IntegrationStrategyRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -21,14 +21,15 @@ public class JobDetailsService {
 
     private final JobAuditService jobAuditService;
     private final JobDetailsJpaRepository jobRepository;
-    private final IntegrationStrategyFactory strategyFactory;
+    private final IntegrationStrategyRegistry strategyRegistry;
 
     public JobDetailsService(JobAuditService jobAuditService,
                              JobDetailsJpaRepository jobRepository,
-                             IntegrationStrategyFactory strategyFactory) {
+                              IntegrationStrategyRegistry strategyRegistry) {
         this.jobAuditService = jobAuditService;
         this.jobRepository = jobRepository;
-        this.strategyFactory = strategyFactory;
+        this.strategyRegistry = strategyRegistry;
+
     }
 
     /**
@@ -89,24 +90,43 @@ public class JobDetailsService {
      */
     private void executeAudits(List<JobExecutionAuditEntity> audits) {
         for (JobExecutionAuditEntity audit : audits) {
-            JobDetailsEntity job = getJobRequired(audit.getJob().getJobId());
+            Long auditId = audit.getAuditId();
 
-            Long start = audit.getNinRangeStart();
-            Long end = audit.getNinRangeEnd();
+            try {
+                JobDetailsEntity job = getJobRequired(audit.getJob().getJobId());
 
-            if (start == null || end == null) {
-                throw new RuntimeException("NIN range start/end is missing for audit id: " + audit.getAuditId());
+                String jobName = String.valueOf(job.getJobName());
+                Long start = audit.getNinRangeStart();
+                Long end = audit.getNinRangeEnd();
+
+                if (jobName == null || jobName.isBlank()) {
+                    throw new RuntimeException("Job name is missing for audit id: " + auditId);
+                }
+
+                if (start == null || end == null) {
+                    throw new RuntimeException("NIN range start/end is missing for audit id: " + auditId);
+                }
+
+                log.info("Starting auditId={} jobName={} start={} end={}", auditId, jobName, start, end);
+
+                jobAuditService.updateStatus(auditId, ExecutionStatus.PROCESSING);
+
+                //registry object depend on jobName ->how registry knows that?
+                //when app starts, Spring gives registry all strategy beans objects
+                //using constructor-> strategies.put(key, strategy bean object); key:job name
+                //we can't remove getKey ->registry no longer knows what string belongs to each strategy object.
+                IntegrationStrategy strategy = strategyRegistry.getStrategy(jobName);
+                strategy.insert(start, end);
+
+                jobAuditService.updateStatus(auditId, ExecutionStatus.SUCCEEDED);
+
+                log.info("Completed auditId={} jobName={}", auditId, jobName);
+
+            } catch (Exception e) {
+                jobAuditService.updateStatus(auditId, ExecutionStatus.FAILED);
+                log.error("Failed auditId={}", auditId, e);
+                throw e;
             }
-            jobAuditService.updateStatus(audit.getAuditId(), ExecutionStatus.PROCESSING);
-
-            IntegrationStrategy strategy = strategyFactory.getStrategy(job.getJobName());
-            //This is the line that moves from “job-level logic” into “parallel NIN-level logic”.
-            strategy.insert(start, end);
-
-            jobAuditService.updateStatus(audit.getAuditId(), ExecutionStatus.SUCCEEDED);
-
         }
     }
-
-
-}
+    }

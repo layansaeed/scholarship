@@ -24,11 +24,10 @@ public class ParallelNinProcessorService {
     private final long rangeChunkSize;
 
     public ParallelNinProcessorService(
-            @Value("${job.threads.count}") int threadCount,
             @Value("${job.db.chunk}") int chunkSize,
             @Value("${job.range.chunk}") long rangeChunkSize
     ) {
-        this.executorService = Executors.newFixedThreadPool(threadCount);
+        this.executorService = Executors.newVirtualThreadPerTaskExecutor();
         this.chunkSize = chunkSize;
         this.rangeChunkSize = rangeChunkSize;
     }
@@ -37,8 +36,8 @@ public class ParallelNinProcessorService {
      * Processes one audit range.
      *
      * Flow:
-     * 1. Split the big audit range into smaller range windows.
-     * 2. For each small range window, fetch beneficiaries page by page.
+     * 1. Split the big audit range into smaller range.
+     * 2. For each small range, fetch beneficiaries page by page.
      * 3. For each page, prepare data in parallel using the thread pool.
      * 4. Save the page results in batch.
      */
@@ -57,110 +56,167 @@ public class ParallelNinProcessorService {
                 strategyName, start, end);
 
         long currentRangeStart = start;
+        int rangeIndex = 1;
 
-        // Split the audit range into smaller windows
         while (currentRangeStart <= end) {
-            //1 + 100 - 1 = 100 -> 100 numbers not 101 cus range.chunk=100 not 101
-            //to make the range size exactly equal to rangeChunkSize.
             long currentRangeEnd = currentRangeStart + rangeChunkSize - 1;
 
-            //This handles the last window: cus the last range may be smaller than rangeChunkSize.
-            /**
-             * currentRangeStart = 201
-             * currentRangeEnd = 201 + 100 - 1 = 300
-             *
-             * But original audit end is only 230.
-             */
             if (currentRangeEnd > end) {
                 currentRangeEnd = end;
             }
 
-            processOneRange(strategy, strategyName, currentRangeStart, currentRangeEnd);
+            log.info("Range window {} started for strategy={} rangeStart={} rangeEnd={}",
+                    rangeIndex, strategyName, currentRangeStart, currentRangeEnd);
 
-            //next range starts(101) exactly after current range ends(100)
+            boolean hasDataInThisRange = processOneRange(
+                    strategy,
+                    strategyName,
+                    currentRangeStart,
+                    currentRangeEnd
+            );
+
+            log.info("Range window {} finished for strategy={} rangeStart={} rangeEnd={}",
+                    rangeIndex, strategyName, currentRangeStart, currentRangeEnd);
+
+            if (!hasDataInThisRange) {
+                log.info("Stopping range loop early because range {} - {} has no data for strategy={}",
+                        currentRangeStart, currentRangeEnd, strategyName);
+                break;
+            }
             currentRangeStart = currentRangeEnd + 1;
+            rangeIndex++;
         }
 
         log.info("Completed parallel processing for strategy={} rangeStart={} rangeEnd={}",
                 strategyName, start, end);
     }
-
     /**
-     * Processes one small range window page by page.
-     * Example:
-     * If range window is 1..100 and page size is 25,
-     * then pages will be processed as 25 + 25 + 25 + 25.
+     * Processes one small range page by page.
      */
-    private void processOneRange(IntegrationStrategy strategy,
+    private boolean processOneRange(IntegrationStrategy strategy,
                                  String strategyName,
                                  Long rangeStart,
                                  Long rangeEnd) {
-
         int pageNumber = 0;
+        boolean hasAnyDataInThisRange = false;
 
-        log.info("Processing range window {} - {} for strategy={}",
+        log.info("Processing range {} - {} for strategy={}",
                 rangeStart, rangeEnd, strategyName);
 
         while (true) {
-            // Fetch one DB page inside the current range window
-            Page<BeneficiaryEntity> page = strategy.getBeneficiaryRepo()
-                    .findBeneficiaries(PageRequest.of(pageNumber, chunkSize), rangeStart, rangeEnd);
+            Page<BeneficiaryEntity> page = loadPage(strategy, pageNumber, rangeStart, rangeEnd);
 
             if (!page.hasContent()) {
-                log.info("No more beneficiaries in range window {} - {} for strategy={}",
+                log.info("No more beneficiaries in range  {} - {} for strategy={}",
                         rangeStart, rangeEnd, strategyName);
                 break;
             }
-
-            log.info("Processing page {} in range window {} - {} for strategy={} with {} beneficiary record(s)",
+            hasAnyDataInThisRange = true;
+            log.info("Processing page {} in range {} - {} for strategy={} with {} beneficiary record(s)",
                     pageNumber, rangeStart, rangeEnd, strategyName, page.getNumberOfElements());
 
-            List<CompletableFuture<Object>> futures = new ArrayList<CompletableFuture<Object>>();
+            //Call api integration side
+            List<CompletableFuture<Object>> futures = createPageTasks(strategy, strategyName, page);
 
-            // Create one async task for each beneficiary in this page
-            for (BeneficiaryEntity beneficiary : page.getContent()) {
-                final Long nin = beneficiary.getNin();
+           //wait the join
+            waitForPageTasks(futures);
 
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    try {
-                        return strategy.prepareForNin(nin);
-                    } catch (Exception e) {
-                        log.error("Failed processing NIN={} in strategy={}. Error={}",
-                                nin, strategyName, e.getMessage(), e);
-                        return null;
-                    }
-                }, executorService));
-            }
+            //prepare list of result
+            List<Object> pageResults = collectPageResults(futures);
 
-            // Wait until all tasks in this page finish
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-            List<Object> pageResults = new ArrayList<Object>();
-
-            // Collect only successful prepared results
-            for (CompletableFuture<Object> future : futures) {
-                Object result = future.join();
-
-                if (result != null) {
-                    pageResults.add(result);
-                }
-            }
-
-            // Save this page in batch
-            if (!pageResults.isEmpty()) {
-                strategy.saveBatch(pageResults);
-            }
+            //save the list
+            savePageResults(strategy, pageResults);
 
             pageNumber++;
+        }
+        return hasAnyDataInThisRange;
+    }
+
+    /**
+     * Loads one beneficiary page from the repository.
+     */
+    private Page<BeneficiaryEntity> loadPage(IntegrationStrategy strategy,
+                                             int pageNumber,
+                                             Long rangeStart,
+                                             Long rangeEnd) {
+        return strategy.getBeneficiaryRepo()
+                .findBeneficiaries(PageRequest.of(pageNumber, chunkSize), rangeStart, rangeEnd);
+    }
+
+    /**
+     * Creates one async task for each beneficiary in the page.
+     */
+    private List<CompletableFuture<Object>> createPageTasks(IntegrationStrategy strategy,
+                                                            String strategyName,
+                                                            Page<BeneficiaryEntity> page) {
+
+        List<CompletableFuture<Object>> futures = new ArrayList<>();
+
+        for (BeneficiaryEntity beneficiary : page.getContent()) {
+            futures.add(createOneTask(strategy, strategyName, beneficiary.getNin()));
+        }
+
+        return futures;
+    }
+
+    /**
+     * Creates one async task for one NIN.
+     */
+    private CompletableFuture<Object> createOneTask(IntegrationStrategy strategy,
+                                                    String strategyName,
+                                                    Long nin) {
+
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return strategy.getDataForNin(nin);
+            } catch (Exception e) {
+                log.error("Failed processing NIN={} in strategy={}. Error={}",
+                        nin, strategyName, e.getMessage(), e);
+                return null;
+            }
+        }, executorService);
+    }
+
+    /**
+     * Waits until all page tasks finish.
+     */
+    private void waitForPageTasks(List<CompletableFuture<Object>> futures) {
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+    }
+
+    /**
+     * Collects only successful page results.
+     */
+    private List<Object> collectPageResults(List<CompletableFuture<Object>> futures) {
+        List<Object> pageResults = new ArrayList<Object>();
+
+        for (CompletableFuture<Object> future : futures) {
+            Object result = future.join();
+
+            if (result != null) {
+                pageResults.add(result);
+            }
+        }
+
+        return pageResults;
+    }
+
+    /**
+     * Saves the page results in batch if there is data to save.
+     */
+    private void savePageResults(IntegrationStrategy strategy, List<Object> pageResults) {
+        if (!pageResults.isEmpty()) {
+            strategy.saveBatch(pageResults);
         }
     }
 
     /**
-     * Shuts down the thread pool when the application stops.
+     * Shuts down the virtual thread executor when the application stops.
      */
     @PreDestroy
     public void shutdown() {
         executorService.shutdown();
-        log.info("ParallelNinProcessorService thread pool shutdown completed");
+        log.info("Virtual thread executor shutdown completed");
     }
 }

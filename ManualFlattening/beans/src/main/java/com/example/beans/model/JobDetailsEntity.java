@@ -1,6 +1,5 @@
 package com.example.beans.model;
 
-import com.example.beans.constant.IntegrationType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,14 +19,14 @@ public class JobDetailsEntity {
     private Long jobId;
 
     @Column(name = "JOB_NAME")
-    @Enumerated(EnumType.STRING)
-    private IntegrationType jobName;
+    //@Enumerated(EnumType.STRING)
+    private String jobName;
 
     @Column(name = "JOB_DESC")
     private String jobDesc;
 
-    @Column(name = "SERVICE_NAME")
-    private String serviceName;
+//    @Column(name = "SERVICE_NAME")
+//    private String serviceName;
 
     @Column(name = "FREQUENCY_ID")
     private Integer frequencyId;
@@ -38,8 +37,8 @@ public class JobDetailsEntity {
     @Column(name = "PRIORITY")
     private Integer priority;
 
-    @Column(name = "INPUTS")
-    private String inputs;
+//    @Column(name = "INPUTS")
+//    private String inputs;
 
     @Column(name = "LAST_JOB_DATE")
     private LocalDateTime lastJobDate;

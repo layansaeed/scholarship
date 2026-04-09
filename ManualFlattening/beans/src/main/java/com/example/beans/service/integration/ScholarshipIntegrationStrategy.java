@@ -22,6 +22,7 @@ import java.util.Map;
 @Service
 public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
 
+    private static final String STAGE_ENTITY_NAME = "ScholarshipStageInformation";
     private final RestTemplate restTemplate;
     private final BeneficiaryJpaRepository beneficiaryRepo;
     private final EntityDefinitionRegistry registry;
@@ -45,6 +46,13 @@ public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
         this.scholarshipUrl = scholarshipUrl;
     }
 
+
+    @Override
+    public String getKey() {
+        return "SCHOLARSHIP";
+    }
+
+
     @Override
     public BeneficiaryJpaRepository getBeneficiaryRepo() {
         return beneficiaryRepo;
@@ -61,7 +69,7 @@ public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
     }
 
     @Override
-    public Object prepareForNin(Long nin) {
+    public Object getDataForNin(Long nin) {
         log.info("Preparing scholarship data for NIN={}", nin);
 
         Map<String, Object> response = callApi(nin);
@@ -74,13 +82,13 @@ public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
     @Override
     @SuppressWarnings("unchecked")
     public void saveBatch(List<Object> pageResults) {
-        EntityDefinition scholarshipDef = requireEntity("SCHOLARSHIP");
-        log.info("Entity loaded: {}", scholarshipDef.getFullTableName());
+        EntityDefinition def = requirePrimaryEntity();
+        log.info("Entity loaded: {}", def.getFullTableName());
 
-        EntityDefinition stageDef = requireEntity("ScholarshipStageInformation");
+        EntityDefinition stageDef = requireEntity(STAGE_ENTITY_NAME);
         log.info("Entity loaded: {}", stageDef.getFullTableName());
 
-        List<Map<String, Object>> allScholarships = new ArrayList<Map<String, Object>>();
+        List<Map<String, Object>> allScholarships = new ArrayList<>();
 
         for (Object result : pageResults) {
             allScholarships.addAll((List<Map<String, Object>>) result);
@@ -94,7 +102,7 @@ public class ScholarshipIntegrationStrategy implements IntegrationStrategy {
         List<Map<String, Object>> scholarshipRows = mapScholarshipsToRows(allScholarships);
 
         List<Long> scholarshipRowIds =
-                genericRepo.insertAllRowsReturnIds(scholarshipDef, scholarshipRows);
+                genericRepo.insertAllRowsReturnIds(def, scholarshipRows);
 
         List<Map<String, Object>> stageRows =
                 mapAllStagesToRows(allScholarships, scholarshipRowIds);

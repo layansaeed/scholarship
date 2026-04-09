@@ -1,6 +1,5 @@
 package com.example.beans.service.integration;
 
-import com.example.beans.constant.IntegrationType;
 import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
@@ -47,6 +46,11 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
     }
 
     @Override
+    public String getKey() {
+        return "HRSD_DIS_ASS";
+    }
+
+    @Override
     public BeneficiaryJpaRepository getBeneficiaryRepo() {
         return beneficiaryRepo;
     }
@@ -62,10 +66,10 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
     }
 
     @Override
-    public Object prepareForNin(Long nin) {
+    public Object getDataForNin(Long nin) {
         log.info("Preparing disability data for NIN={}", nin);
 
-        EntityDefinition def = requireEntity(IntegrationType.HRSD_DIS_ASS.name());
+        EntityDefinition def = requireEntity(getKey());
         Map<String, Object> response = callApi(nin);
         Map<String, Object> row = normalizeRowByXml(def, response); //normalize response to one row map
 
@@ -76,7 +80,8 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
     @Override
     @SuppressWarnings("unchecked")
     public void saveBatch(List<Object> pageResults) {
-        EntityDefinition def = requireEntity(IntegrationType.HRSD_DIS_ASS.name());
+        EntityDefinition def = requirePrimaryEntity();
+        //EntityDefinition def = requireEntity(getKey());
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
@@ -98,6 +103,7 @@ public class DisabilityIntegrationStrategy implements IntegrationStrategy {
         log.info("Saved disability batch with {} row(s)", rows.size());
     }
 
+    //audit id -> get name ->to access config table using job name -> its value -> call depend on its value column
     private Map<String, Object> callApi(Long nin) {
         log.info("Calling disability API for NIN {}", nin);
 
