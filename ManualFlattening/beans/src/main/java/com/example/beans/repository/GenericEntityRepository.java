@@ -48,26 +48,26 @@ public class GenericEntityRepository {
     /**
      * Inserts all rows and returns generated row_id values.
      */
-    @Transactional
-    public List<Long> insertAllRowsReturnIds(EntityDefinition entity, List<Map<String, Object>> rows) {
-
-        int rowsCount = (rows == null) ? 0 : rows.size();
-
-        log.info("Inserting entity '{}' into table '{}' and returning row_id(s) (rows passed = {})",
-                entity.getEntityName(), entity.getFullTableName(), rowsCount);
-
-        if (rowsCount == 0) {
-            log.info("No rows provided for entity '{}'. Nothing to insert.", entity.getEntityName());
-            return Collections.emptyList();
-        }
-
-        List<Long> generatedIds = insertRowsInternal(entity, rows, true);
-
-        log.info("Finished entity '{}': inserted {} row(s). Returned {} row_id(s).",
-                entity.getEntityName(), rowsCount, generatedIds.size());
-
-        return generatedIds;
-    }
+//    @Transactional
+//    public List<Long> insertAllRowsReturnIds(EntityDefinition entity, List<Map<String, Object>> rows) {
+//
+//        int rowsCount = (rows == null) ? 0 : rows.size();
+//
+//        log.info("Inserting entity '{}' into table '{}' and returning row_id(s) (rows passed = {})",
+//                entity.getEntityName(), entity.getFullTableName(), rowsCount);
+//
+//        if (rowsCount == 0) {
+//            log.info("No rows provided for entity '{}'. Nothing to insert.", entity.getEntityName());
+//            return Collections.emptyList();
+//        }
+//
+//        List<Long> generatedIds = insertRowsInternal(entity, rows, true);
+//
+//        log.info("Finished entity '{}': inserted {} row(s). Returned {} row_id(s).",
+//                entity.getEntityName(), rowsCount, generatedIds.size());
+//
+//        return generatedIds;
+//    }
 
     /**
      * Shared insert logic for both public methods.

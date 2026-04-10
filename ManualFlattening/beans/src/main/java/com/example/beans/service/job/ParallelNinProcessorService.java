@@ -1,7 +1,11 @@
 package com.example.beans.service.job;
 
 import com.example.beans.model.BeneficiaryEntity;
-import com.example.beans.service.pattern.IntegrationStrategy;
+import com.example.beans.model.EntityDefinition;
+import com.example.beans.repository.BeneficiaryJpaRepository;
+import com.example.beans.repository.GenericEntityRepository;
+import com.example.beans.service.bean.EntityDefinitionRegistry;
+import com.example.beans.service.integration.DynamicJobApiService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -10,7 +14,9 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.PreDestroy;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,27 +29,37 @@ public class ParallelNinProcessorService {
     private final int chunkSize;
     private final long rangeChunkSize;
 
+    private final BeneficiaryJpaRepository beneficiaryRepo;
+    private final DynamicJobApiService dynamicJobApiService;
+    private final EntityDefinitionRegistry entityDefinitionRegistry;
+    private final GenericEntityRepository genericEntityRepository;
+
     public ParallelNinProcessorService(
             @Value("${job.threads.count}") int threadCount,
             @Value("${job.db.chunk}") int chunkSize,
-            @Value("${job.range.chunk}") long rangeChunkSize
+            @Value("${job.range.chunk}") long rangeChunkSize,
+            BeneficiaryJpaRepository beneficiaryRepo,
+            DynamicJobApiService dynamicJobApiService,
+            EntityDefinitionRegistry entityDefinitionRegistry,
+            GenericEntityRepository genericEntityRepository
     ) {
         this.executorService = Executors.newFixedThreadPool(threadCount);
         this.chunkSize = chunkSize;
         this.rangeChunkSize = rangeChunkSize;
+        this.beneficiaryRepo = beneficiaryRepo;
+        this.dynamicJobApiService = dynamicJobApiService;
+        this.entityDefinitionRegistry = entityDefinitionRegistry;
+        this.genericEntityRepository = genericEntityRepository;
     }
 
-    /**
-     * Processes one audit range.
-     *
-     * Flow:
-     * 1. Split the big audit range into smaller range windows.
-     * 2. For each small range window, fetch beneficiaries page by page.
-     * 3. For each page, prepare data in parallel using the thread pool.
-     * 4. Save the page results in batch.
-     */
-    public void processInParallel(IntegrationStrategy strategy, Long start, Long end) {
-        String strategyName = strategy.getClass().getSimpleName();
+    public void processInParallel(Long jobId, String jobName, Long start, Long end) {
+        if (jobId == null) {
+            throw new RuntimeException("Job id must not be null");
+        }
+
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new RuntimeException("Job name must not be null or blank");
+        }
 
         if (start == null || end == null) {
             throw new RuntimeException("NIN range start/end must not be null");
@@ -53,111 +69,101 @@ public class ParallelNinProcessorService {
             throw new RuntimeException("NIN range start must not be greater than end");
         }
 
-        log.info("Starting parallel processing for strategy={} rangeStart={} rangeEnd={}",
-                strategyName, start, end);
+        EntityDefinition def = entityDefinitionRegistry.get(jobName);
+
+        log.info("Starting parallel processing for jobId={} jobName={} rangeStart={} rangeEnd={}",
+                jobId, jobName, start, end);
 
         long currentRangeStart = start;
 
-        // Split the audit range into smaller windows
         while (currentRangeStart <= end) {
-            //1 + 100 - 1 = 100 -> 100 numbers not 101 cus range.chunk=100 not 101
-            //to make the range size exactly equal to rangeChunkSize.
             long currentRangeEnd = currentRangeStart + rangeChunkSize - 1;
 
-            //This handles the last window: cus the last range may be smaller than rangeChunkSize.
-            /**
-             * currentRangeStart = 201
-             * currentRangeEnd = 201 + 100 - 1 = 300
-             *
-             * But original audit end is only 230.
-             */
             if (currentRangeEnd > end) {
                 currentRangeEnd = end;
             }
 
-            processOneRange(strategy, strategyName, currentRangeStart, currentRangeEnd);
+            processOneRange(jobId, jobName, def, currentRangeStart, currentRangeEnd);
 
-            //next range starts(101) exactly after current range ends(100)
             currentRangeStart = currentRangeEnd + 1;
         }
 
-        log.info("Completed parallel processing for strategy={} rangeStart={} rangeEnd={}",
-                strategyName, start, end);
+        log.info("Completed parallel processing for jobId={} jobName={} rangeStart={} rangeEnd={}",
+                jobId, jobName, start, end);
     }
 
-    /**
-     * Processes one small range window page by page.
-     * Example:
-     * If range window is 1..100 and page size is 25,
-     * then pages will be processed as 25 + 25 + 25 + 25.
-     */
-    private void processOneRange(IntegrationStrategy strategy,
-                                 String strategyName,
+    private void processOneRange(Long jobId,
+                                 String jobName,
+                                 EntityDefinition def,
                                  Long rangeStart,
                                  Long rangeEnd) {
 
         int pageNumber = 0;
 
-        log.info("Processing range window {} - {} for strategy={}",
-                rangeStart, rangeEnd, strategyName);
+        log.info("Processing range window {} - {} for jobName={}", rangeStart, rangeEnd, jobName);
 
         while (true) {
-            // Fetch one DB page inside the current range window
-            Page<BeneficiaryEntity> page = strategy.getBeneficiaryRepo()
-                    .findBeneficiaries(PageRequest.of(pageNumber, chunkSize), rangeStart, rangeEnd);
+            Page<BeneficiaryEntity> page =
+                    beneficiaryRepo.findBeneficiaries(PageRequest.of(pageNumber, chunkSize), rangeStart, rangeEnd);
 
             if (!page.hasContent()) {
-                log.info("No more beneficiaries in range window {} - {} for strategy={}",
-                        rangeStart, rangeEnd, strategyName);
+                log.info("No more beneficiaries in range window {} - {} for jobName={}",
+                        rangeStart, rangeEnd, jobName);
                 break;
             }
 
-            log.info("Processing page {} in range window {} - {} for strategy={} with {} beneficiary record(s)",
-                    pageNumber, rangeStart, rangeEnd, strategyName, page.getNumberOfElements());
+            log.info("Processing page {} in range window {} - {} for jobName={} with {} beneficiary record(s)",
+                    pageNumber, rangeStart, rangeEnd, jobName, page.getNumberOfElements());
 
-            List<CompletableFuture<Object>> futures = new ArrayList<CompletableFuture<Object>>();
+            List<CompletableFuture<Map<String, Object>>> futures = new ArrayList<>();
 
-            // Create one async task for each beneficiary in this page
             for (BeneficiaryEntity beneficiary : page.getContent()) {
                 final Long nin = beneficiary.getNin();
 
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        return strategy.prepareForNin(nin);
+                        Map<String, Object> response = dynamicJobApiService.callApi(jobId, nin);
+                        return normalizeRowByXml(def, response);
                     } catch (Exception e) {
-                        log.error("Failed processing NIN={} in strategy={}. Error={}",
-                                nin, strategyName, e.getMessage(), e);
+                        log.error("Failed processing NIN={} for jobName={}. Error={}",
+                                nin, jobName, e.getMessage(), e);
                         return null;
                     }
                 }, executorService));
             }
 
-            // Wait until all tasks in this page finish
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-            List<Object> pageResults = new ArrayList<Object>();
+            List<Map<String, Object>> pageResults = new ArrayList<>();
 
-            // Collect only successful prepared results
-            for (CompletableFuture<Object> future : futures) {
-                Object result = future.join();
+            for (CompletableFuture<Map<String, Object>> future : futures) {
+                Map<String, Object> result = future.join();
 
                 if (result != null) {
                     pageResults.add(result);
                 }
             }
 
-            // Save this page in batch
             if (!pageResults.isEmpty()) {
-                strategy.saveBatch(pageResults);
+                genericEntityRepository.insertAllRows(def, pageResults);
+                log.info("Saved {} row(s) for jobName={} in page={}", pageResults.size(), jobName, pageNumber);
             }
 
             pageNumber++;
         }
     }
 
-    /**
-     * Shuts down the thread pool when the application stops.
-     */
+    //Build a new row map that contains only the fields defined in XML with values from rest template
+    private Map<String, Object> normalizeRowByXml(EntityDefinition def, Map<String, Object> response) {
+        Map<String, Object> row = new LinkedHashMap<>();
+
+        for (String javaFieldName : def.getFieldMapping().keySet()) {
+            row.put(javaFieldName, response.get(javaFieldName));
+        }
+
+        return row;
+    }
+
     @PreDestroy
     public void shutdown() {
         executorService.shutdown();
