@@ -6,13 +6,13 @@ import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
 import com.example.beans.service.bean.EntityDefinitionRegistry;
 import com.example.beans.service.integration.DynamicJobApiService;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,7 +35,6 @@ public class ParallelNinProcessorService {
     private final GenericEntityRepository genericEntityRepository;
 
     public ParallelNinProcessorService(
-            @Value("${job.threads.count}") int threadCount,
             @Value("${job.db.chunk}") int chunkSize,
             @Value("${job.range.chunk}") long rangeChunkSize,
             BeneficiaryJpaRepository beneficiaryRepo,
@@ -43,7 +42,7 @@ public class ParallelNinProcessorService {
             EntityDefinitionRegistry entityDefinitionRegistry,
             GenericEntityRepository genericEntityRepository
     ) {
-        this.executorService = Executors.newFixedThreadPool(threadCount);
+        this.executorService = Executors.newVirtualThreadPerTaskExecutor();
         this.chunkSize = chunkSize;
         this.rangeChunkSize = rangeChunkSize;
         this.beneficiaryRepo = beneficiaryRepo;

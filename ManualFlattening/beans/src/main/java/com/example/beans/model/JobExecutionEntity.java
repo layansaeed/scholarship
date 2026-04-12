@@ -1,10 +1,9 @@
 package com.example.beans.model;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import javax.persistence.*;
 
 @Entity
 @Table(name = "JOB_EXECUTION", schema = "EXT")

@@ -3,7 +3,7 @@ package com.example.beans.model;
 import com.example.beans.constant.ExecutionStatus;
 import lombok.Data;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "JOB_EXECUTION_STATUS", schema = "EXT")

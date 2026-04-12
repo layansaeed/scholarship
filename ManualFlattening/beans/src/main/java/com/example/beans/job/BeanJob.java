@@ -2,7 +2,7 @@ package com.example.beans.job;
 
 import com.example.beans.service.bean.EntityDefinitionRegistry;
 import com.example.beans.service.bean.XMLBeanLoaderService;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
