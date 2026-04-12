@@ -52,11 +52,16 @@ public class ParallelNinProcessorService {
         this.genericEntityRepository = genericEntityRepository;
     }
 
-    public void processInParallel(Long jobId, String jobName, Long start, Long end) {
-        if (jobId == null) {
-            throw new RuntimeException("Job id must not be null");
-        }
-
+    /**
+     * Processes one audit range for one job name.
+     *
+     * Flow:
+     * 1. Validate range.
+     * 2. Load XML entity definition by job name.
+     * 3. Split big range into smaller windows.
+     * 4. Process each window page by page.
+     */
+    public void processInParallel(String jobName, Long start, Long end) {
         if (jobName == null || jobName.trim().isEmpty()) {
             throw new RuntimeException("Job name must not be null or blank");
         }
@@ -71,8 +76,8 @@ public class ParallelNinProcessorService {
 
         EntityDefinition def = entityDefinitionRegistry.get(jobName);
 
-        log.info("Starting parallel processing for jobId={} jobName={} rangeStart={} rangeEnd={}",
-                jobId, jobName, start, end);
+        log.info("Starting parallel processing for jobName={} rangeStart={} rangeEnd={}",
+                jobName, start, end);
 
         long currentRangeStart = start;
 
@@ -83,24 +88,24 @@ public class ParallelNinProcessorService {
                 currentRangeEnd = end;
             }
 
-            processOneRange(jobId, jobName, def, currentRangeStart, currentRangeEnd);
+            processOneRange(jobName, def, currentRangeStart, currentRangeEnd);
 
             currentRangeStart = currentRangeEnd + 1;
         }
 
-        log.info("Completed parallel processing for jobId={} jobName={} rangeStart={} rangeEnd={}",
-                jobId, jobName, start, end);
+        log.info("Completed parallel processing for jobName={} rangeStart={} rangeEnd={}",
+                jobName, start, end);
     }
 
-    private void processOneRange(Long jobId,
-                                 String jobName,
+    private void processOneRange(String jobName,
                                  EntityDefinition def,
                                  Long rangeStart,
                                  Long rangeEnd) {
 
         int pageNumber = 0;
 
-        log.info("Processing range window {} - {} for jobName={}", rangeStart, rangeEnd, jobName);
+        log.info("Processing range window {} - {} for jobName={}",
+                rangeStart, rangeEnd, jobName);
 
         while (true) {
             Page<BeneficiaryEntity> page =
@@ -115,14 +120,15 @@ public class ParallelNinProcessorService {
             log.info("Processing page {} in range window {} - {} for jobName={} with {} beneficiary record(s)",
                     pageNumber, rangeStart, rangeEnd, jobName, page.getNumberOfElements());
 
-            List<CompletableFuture<Map<String, Object>>> futures = new ArrayList<>();
+            List<CompletableFuture<Map<String, Object>>> futures =
+                    new ArrayList<>();
 
             for (BeneficiaryEntity beneficiary : page.getContent()) {
                 final Long nin = beneficiary.getNin();
 
                 futures.add(CompletableFuture.supplyAsync(() -> {
                     try {
-                        Map<String, Object> response = dynamicJobApiService.callApi(jobId, nin);
+                        Map<String, Object> response = dynamicJobApiService.callApi(jobName, nin);
                         return normalizeRowByXml(def, response);
                     } catch (Exception e) {
                         log.error("Failed processing NIN={} for jobName={}. Error={}",
@@ -146,16 +152,27 @@ public class ParallelNinProcessorService {
 
             if (!pageResults.isEmpty()) {
                 genericEntityRepository.insertAllRows(def, pageResults);
-                log.info("Saved {} row(s) for jobName={} in page={}", pageResults.size(), jobName, pageNumber);
+                log.info("Saved {} row(s) for jobName={} in page={}",
+                        pageResults.size(), jobName, pageNumber);
             }
 
             pageNumber++;
         }
     }
 
-    //Build a new row map that contains only the fields defined in XML with values from rest template
+    /**
+     * Keeps only XML-defined fields and creates one normalized row map.
+     *
+     * Example:
+     * XML fields:
+     * - nationalId
+     * - firstName
+     * - dob
+     *
+     * API response may contain many keys, but this method only keeps XML fields.
+     */
     private Map<String, Object> normalizeRowByXml(EntityDefinition def, Map<String, Object> response) {
-        Map<String, Object> row = new LinkedHashMap<>();
+        Map<String, Object> row = new LinkedHashMap<String, Object>();
 
         for (String javaFieldName : def.getFieldMapping().keySet()) {
             row.put(javaFieldName, response.get(javaFieldName));

@@ -1,7 +1,7 @@
 package com.example.beans.controller;
 
 import com.example.beans.model.JobExecutorBatchRequest;
-import com.example.beans.service.job.JobDetailsService;
+import com.example.beans.service.job.JobExecutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -12,10 +12,9 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/v1/job-executor")
 public class JobController {
     private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
-    private final JobDetailsService jobService;
-
-    public JobController(JobDetailsService jobService) {
-        this.jobService = jobService;
+    private final JobExecutionService jobExecutionService;
+    public JobController(JobExecutionService jobExecutionService) {
+        this.jobExecutionService = jobExecutionService;
     }
 
 
@@ -30,20 +29,17 @@ public class JobController {
 //            return ResponseEntity.badRequest().body(ex.getMessage());
 //        }
 //    }
-
-    @PostMapping()
-    public ResponseEntity<?> runJobsByAuditIds2(@RequestBody JobExecutorBatchRequest auditIds ) {
-        try {
-            System.out.println("audit id list size: " + auditIds.getJobs().size());
-            System.out.println("audit id list iterator: " + auditIds.getJobs().listIterator().toString());
-
-            jobService.runJobsByAuditIds(auditIds);
-            return ResponseEntity.ok().build();
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            return ResponseEntity.badRequest().body(ex.getMessage());
-        }
+@PostMapping()
+public ResponseEntity<?> runJobs(@RequestBody JobExecutorBatchRequest request) {
+    try {
+        System.out.println("job list size: " + request.getJobs().size());
+        jobExecutionService.runJobsByExecutionIds(request);
+        return ResponseEntity.ok().build();
+    } catch (Exception ex) {
+        ex.printStackTrace();
+        return ResponseEntity.badRequest().body(ex.getMessage());
     }
+}
 
         @GetMapping("/alive")
         public ResponseEntity<?> alive() {

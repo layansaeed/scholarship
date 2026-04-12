@@ -4,5 +4,5 @@ import lombok.Data;
 
 @Data
 public class JobExecutorRequest {
-   private Long auditId;
+   private Long executionId;
 }

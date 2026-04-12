@@ -1,45 +1,63 @@
 package com.example.beans.service.job;
 
-import com.example.beans.model.JobConfigEntity;
-import com.example.beans.repository.JobConfigJpaRepository;
+import com.example.beans.config.Config;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 @Service
 public class JobConfigService {
 
-    private final JobConfigJpaRepository jobConfigRepository;
+    private final Config.PropertySourceConfig propertySourceConfig;
 
-    public JobConfigService(JobConfigJpaRepository jobConfigRepository) {
-        this.jobConfigRepository = jobConfigRepository;
+    public JobConfigService(Config.PropertySourceConfig propertySourceConfig) {
+        this.propertySourceConfig = propertySourceConfig;
     }
 
-    public Map<String, String> getConfigMap(Long jobId) {
-        List<JobConfigEntity> rows = jobConfigRepository.findByIdJobId(jobId);
-
-        if (rows.isEmpty()) {
-            throw new RuntimeException("No job config found for jobId: " + jobId);
+    /**
+     * Returns one normalized config map for a job name.
+     *
+     * Input properties in Environment:
+     * - HRSD_DIS_ASS.url
+     * - HRSD_DIS_ASS.httpMethod
+     * - HRSD_DIS_ASS.auth.url
+     *
+     * Output map:
+     * - url -> ...
+     * - httpMethod -> ...
+     * - auth.url -> ...
+     */
+    public Map<String, String> getConfigMap(String jobName) {
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new RuntimeException("Job name must not be null or blank");
         }
 
-        Map<String, String> config = new LinkedHashMap<>();
+        String prefix = jobName + ".";
+        Map<String, String> rawProperties = propertySourceConfig.getPropertiesStartingWith(prefix);
 
-        for (JobConfigEntity row : rows) {
-            String key = row.getConfigKey();
-
-            if (key == null || key.trim().isEmpty()) {
-                throw new RuntimeException("Found blank config key for jobId: " + jobId);
-            }
-
-            if (config.containsKey(key)) {
-                throw new RuntimeException("Duplicate config key '" + key + "' for jobId: " + jobId);
-            }
-
-            config.put(key, row.getConfigValue());
+        if (rawProperties.isEmpty()) {
+            throw new RuntimeException("No configuration found for jobName: " + jobName);
         }
 
-        return config;
+        Map<String, String> normalizedConfig = new LinkedHashMap<String, String>();
+
+        for (Map.Entry<String, String> entry : rawProperties.entrySet()) {
+            String fullKey = entry.getKey();
+            String normalizedKey = fullKey.substring(prefix.length());
+
+            if (normalizedKey.trim().isEmpty()) {
+                continue;
+            }
+
+            if (normalizedConfig.containsKey(normalizedKey)) {
+                throw new RuntimeException("Duplicate normalized config key '" + normalizedKey
+                        + "' for jobName: " + jobName);
+            }
+
+            normalizedConfig.put(normalizedKey, entry.getValue());
+        }
+
+        return normalizedConfig;
     }
 }

@@ -26,5 +26,7 @@ public final class DynamicJobApiConstants {
     public static final String TOKEN_JWT = "jwt";
 
     public static final String DEFAULT_HTTP_METHOD = "POST";
-    public static final String DEFAULT_MEDIA_TYPE = "application/json";
+    public static final String DEFAULT_ACCEPT_MEDIA_TYPE = "application/json";
+
+
 }
