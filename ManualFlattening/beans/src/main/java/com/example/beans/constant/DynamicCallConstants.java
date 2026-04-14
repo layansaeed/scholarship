@@ -8,6 +8,9 @@ public final class DynamicCallConstants {
     public static final String CONFIG_URL = "url";
     public static final String CONFIG_HTTP_METHOD = "httpMethod";
     public static final String CONFIG_MEDIA_TYPE = "mediaType";
+    public static final String CONFIG_CLIENT_ID = "clientId";
+    public static final String CONFIG_CLIENT_SECRET = "clientSecret";
+
     public static final String CONFIG_AUTHORIZATION = "authorization";
 
     public static final String CONFIG_AUTH_URL = "auth.url";

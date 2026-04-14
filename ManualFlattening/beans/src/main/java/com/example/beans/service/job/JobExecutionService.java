@@ -1,5 +1,6 @@
 package com.example.beans.service.job;
 
+import com.example.beans.constant.ExecutionStatus;
 import com.example.beans.model.JobExecutorBatchRequest;
 import com.example.beans.model.JobExecutionEntity;
 import com.example.beans.model.JobExecutorRequest;
@@ -17,12 +18,14 @@ public class JobExecutionService {
     private final JobExecutionJpaRepository jobExecutionRepository;
     private final ParallelNinProcessorService parallelNinProcessorService;
     private final JobDetailsService jobDetailsService;
+    private final JobAuditService jobAuditService;
 
     public JobExecutionService(JobExecutionJpaRepository jobExecutionRepository,
-                               ParallelNinProcessorService parallelNinProcessorService, JobDetailsService jobDetailsService) {
+                               ParallelNinProcessorService parallelNinProcessorService, JobDetailsService jobDetailsService, JobAuditService jobAuditService) {
         this.jobExecutionRepository = jobExecutionRepository;
         this.parallelNinProcessorService = parallelNinProcessorService;
         this.jobDetailsService = jobDetailsService;
+        this.jobAuditService = jobAuditService;
     }
 
     public void runJobsByExecutionIds(JobExecutorBatchRequest request) {
@@ -58,27 +61,39 @@ public class JobExecutionService {
     private void executeJobs(List<JobExecutionEntity> executions) {
         for (JobExecutionEntity execution : executions) {
             Long executionId = execution.getExecutionId();
+            Long auditId = execution.getAuditId();
 
             try {
                 String jobName = execution.getJobName();
                 Long start = execution.getNinRangeStart();
                 Long end = execution.getNinRangeEnd();
 
-                if (jobName == null || jobName.trim().isEmpty()) {
-                    throw new RuntimeException("Job name is missing for execution id: " + executionId);
-                }
+//                if (auditId == null) {
+//                    throw new RuntimeException("Audit id is missing for execution id: " + executionId);
+//                }
+//
+//                if (jobName == null || jobName.trim().isEmpty()) {
+//                    throw new RuntimeException("Job name is missing for execution id: " + executionId);
+//                }
+//
+//                if (start == null || end == null) {
+//                    throw new RuntimeException("NIN range start/end is missing for execution id: " + executionId);
+//                }
 
-                if (start == null || end == null) {
-                    throw new RuntimeException("NIN range start/end is missing for execution id: " + executionId);
-                }
+                jobAuditService.updateStatus(auditId, ExecutionStatus.PROCESSING);
 
-                log.info("Executing executionId={}, jobName={}, start={}, end={}",
-                        executionId, jobName, start, end);
+                log.info("Executing executionId={}, auditId={}, jobName={}, start={}, end={}",
+                        executionId, auditId, jobName, start, end);
 
                 parallelNinProcessorService.processInParallel(jobName, start, end);
 
+                jobAuditService.updateStatus(auditId, ExecutionStatus.SUCCEEDED);
+
             } catch (Exception e) {
-                log.error("Failed executionId={}", executionId, e);
+                if (auditId != null) {
+                    jobAuditService.updateStatus(auditId, ExecutionStatus.FAILED);
+                }
+                log.error("Failed executionId={}, auditId={}", executionId, auditId, e);
                 throw e;
             }
         }
@@ -92,10 +107,35 @@ public class JobExecutionService {
             throw new RuntimeException("Job id must not be null");
         }
 
-        String jobName = jobDetailsService.getJobNameRequired(jobId);
+        JobExecutionEntity execution = jobExecutionRepository.findFirstByJobId(jobId)
+                .orElseThrow(() -> new RuntimeException("Execution not found for job id: " + jobId));
 
-        log.info("Executing full job for jobId={}, jobName={}", jobId, jobName);
+        Long auditId = execution.getAuditId();
+        String jobName = execution.getJobName();
 
-        parallelNinProcessorService.processInParallel(jobName);
+        if (auditId == null) {
+            throw new RuntimeException("Audit id is missing for job id: " + jobId);
+        }
+
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new RuntimeException("Job name is missing for job id: " + jobId);
+        }
+
+        try {
+            log.info("Executing full job for jobId={}, auditId={}, jobName={}", jobId, auditId, jobName);
+
+            jobAuditService.updateStatus(auditId, ExecutionStatus.PROCESSING);
+
+            parallelNinProcessorService.processInParallel(jobName);
+
+            jobAuditService.updateStatus(auditId, ExecutionStatus.SUCCEEDED);
+
+        } catch (Exception e) {
+            jobAuditService.updateStatus(auditId, ExecutionStatus.FAILED);
+            log.error("Failed full job for jobId={}, auditId={}", jobId, auditId, e);
+            throw e;
+        }
     }
+
+
 }

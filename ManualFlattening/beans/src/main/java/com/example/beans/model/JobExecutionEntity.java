@@ -19,6 +19,9 @@ public class JobExecutionEntity {
     @Column(name = "JOB_ID")
     private Long jobId;
 
+    @Column(name = "AUDIT_ID")
+    private Long auditId;
+
     @Column(name = "SERVER_ID")
     private Long serverId;
 
