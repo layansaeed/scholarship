@@ -1,8 +1,8 @@
 package com.example.beans.constant;
 
-public final class DynamicJobApiConstants {
+public final class DynamicCallConstants {
 
-    private DynamicJobApiConstants() {
+    private DynamicCallConstants() {
     }
 
     public static final String CONFIG_URL = "url";
@@ -26,7 +26,6 @@ public final class DynamicJobApiConstants {
     public static final String TOKEN_JWT = "jwt";
 
     public static final String DEFAULT_HTTP_METHOD = "POST";
-    public static final String DEFAULT_ACCEPT_MEDIA_TYPE = "application/json";
 
 
 }

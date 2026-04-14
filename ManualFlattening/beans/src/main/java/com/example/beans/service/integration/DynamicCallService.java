@@ -1,6 +1,6 @@
 package com.example.beans.service.integration;
 
-import com.example.beans.constant.DynamicJobApiConstants;
+import com.example.beans.constant.DynamicCallConstants;
 import com.example.beans.service.job.JobConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,13 +17,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
-public class DynamicJobApiService {
+public class DynamicCallService {
 
     private final Logger log = LoggerFactory.getLogger(this.getClass());
     private final RestTemplate restTemplate;
     private final JobConfigService jobConfigService;
 
-    public DynamicJobApiService(RestTemplate restTemplate, JobConfigService jobConfigService) {
+    public DynamicCallService(RestTemplate restTemplate, JobConfigService jobConfigService) {
         this.restTemplate = restTemplate;
         this.jobConfigService = jobConfigService;
     }
@@ -47,9 +47,9 @@ public class DynamicJobApiService {
         //return clean map without prefix
         Map<String, String> config = jobConfigService.getConfigMap(jobName);
 
-        String url = getRequiredValue(config, DynamicJobApiConstants.CONFIG_URL);
-        String httpMethodValue = getRequiredValue(config, DynamicJobApiConstants.CONFIG_HTTP_METHOD);
-        String mediaTypeValue = getRequiredValue(config, DynamicJobApiConstants.CONFIG_MEDIA_TYPE);
+        String url = getRequiredValue(config, DynamicCallConstants.CONFIG_URL);
+        String httpMethodValue = getRequiredValue(config, DynamicCallConstants.CONFIG_HTTP_METHOD);
+        String mediaTypeValue = getRequiredValue(config, DynamicCallConstants.CONFIG_MEDIA_TYPE);
 
         HttpMethod httpMethod = HttpMethod.valueOf(httpMethodValue);
         MediaType mediaType = MediaType.parseMediaType(mediaTypeValue);
@@ -58,7 +58,7 @@ public class DynamicJobApiService {
         headers.setContentType(mediaType);
         headers.setAccept(
                 Collections.singletonList(
-                        MediaType.parseMediaType(DynamicJobApiConstants.DEFAULT_ACCEPT_MEDIA_TYPE)
+                        MediaType.parseMediaType(MediaType.APPLICATION_JSON_VALUE)
                 )
         );
         //LinkedHashMap->preserves insertion order. Also, it is not strictly required use it here, but it gives stable ordering.
@@ -73,6 +73,7 @@ public class DynamicJobApiService {
         ResponseEntity<Map> response =
                 restTemplate.exchange(url, httpMethod, requestEntity, Map.class);
 
+        //Todo handel if the api return failed
         if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
             throw new RuntimeException(
                     "API call failed for jobName=" + jobName + " status=" + response.getStatusCode()

@@ -50,4 +50,19 @@ public ResponseEntity<?> runJobs(@RequestBody JobExecutorBatchRequest request) {
             return ResponseEntity.ok().build();
         }
 
+    /**
+     * New endpoint:
+     * executes one full job using only jobId from path variable
+     */
+    @PostMapping("/run/{jobId}")
+    public ResponseEntity<?> runFullJob(@PathVariable Long jobId) {
+        try {
+            jobExecutionService.runFullJobByJobId(jobId);
+            return ResponseEntity.ok().build();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
+    }
+
 }

@@ -3,7 +3,6 @@ package com.example.beans.service.job;
 import com.example.beans.model.JobExecutorBatchRequest;
 import com.example.beans.model.JobExecutionEntity;
 import com.example.beans.model.JobExecutorRequest;
-import com.example.beans.model.JobExecutorRequest;
 import com.example.beans.repository.JobExecutionJpaRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -17,11 +16,13 @@ public class JobExecutionService {
 
     private final JobExecutionJpaRepository jobExecutionRepository;
     private final ParallelNinProcessorService parallelNinProcessorService;
+    private final JobDetailsService jobDetailsService;
 
     public JobExecutionService(JobExecutionJpaRepository jobExecutionRepository,
-                               ParallelNinProcessorService parallelNinProcessorService) {
+                               ParallelNinProcessorService parallelNinProcessorService, JobDetailsService jobDetailsService) {
         this.jobExecutionRepository = jobExecutionRepository;
         this.parallelNinProcessorService = parallelNinProcessorService;
+        this.jobDetailsService = jobDetailsService;
     }
 
     public void runJobsByExecutionIds(JobExecutorBatchRequest request) {
@@ -81,5 +82,20 @@ public class JobExecutionService {
                 throw e;
             }
         }
+    }
+    /**
+     * New logic:
+     * run one full job using jobId only
+     */
+    public void runFullJobByJobId(Long jobId) {
+        if (jobId == null) {
+            throw new RuntimeException("Job id must not be null");
+        }
+
+        String jobName = jobDetailsService.getJobNameRequired(jobId);
+
+        log.info("Executing full job for jobId={}, jobName={}", jobId, jobName);
+
+        parallelNinProcessorService.processInParallel(jobName);
     }
 }

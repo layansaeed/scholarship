@@ -5,7 +5,8 @@ import com.example.beans.model.EntityDefinition;
 import com.example.beans.repository.BeneficiaryJpaRepository;
 import com.example.beans.repository.GenericEntityRepository;
 import com.example.beans.service.bean.EntityDefinitionRegistry;
-import com.example.beans.service.integration.DynamicJobApiService;
+import com.example.beans.service.integration.DynamicCallService;
+import com.example.beans.service.integration.DynamicCallService;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +31,7 @@ public class ParallelNinProcessorService {
     private final long rangeChunkSize;
 
     private final BeneficiaryJpaRepository beneficiaryRepo;
-    private final DynamicJobApiService dynamicJobApiService;
+    private final DynamicCallService dynamicCallService;
     private final EntityDefinitionRegistry entityDefinitionRegistry;
     private final GenericEntityRepository genericEntityRepository;
 
@@ -38,7 +39,7 @@ public class ParallelNinProcessorService {
             @Value("${job.db.chunk}") int chunkSize,
             @Value("${job.range.chunk}") long rangeChunkSize,
             BeneficiaryJpaRepository beneficiaryRepo,
-            DynamicJobApiService dynamicJobApiService,
+            DynamicCallService dynamicCallService,
             EntityDefinitionRegistry entityDefinitionRegistry,
             GenericEntityRepository genericEntityRepository
     ) {
@@ -46,32 +47,18 @@ public class ParallelNinProcessorService {
         this.chunkSize = chunkSize;
         this.rangeChunkSize = rangeChunkSize;
         this.beneficiaryRepo = beneficiaryRepo;
-        this.dynamicJobApiService = dynamicJobApiService;
+        this.dynamicCallService = dynamicCallService;
         this.entityDefinitionRegistry = entityDefinitionRegistry;
         this.genericEntityRepository = genericEntityRepository;
     }
 
     /**
-     * Processes one audit range for one job name.
-     *
-     * Flow:
-     * 1. Validate range.
-     * 2. Load XML entity definition by job name.
-     * 3. Split big range into smaller windows.
-     * 4. Process each window page by page.
+     * Existing logic:
+     * process one job within a specific NIN range.
      */
     public void processInParallel(String jobName, Long start, Long end) {
-        if (jobName == null || jobName.trim().isEmpty()) {
-            throw new RuntimeException("Job name must not be null or blank");
-        }
-
-        if (start == null || end == null) {
-            throw new RuntimeException("NIN range start/end must not be null");
-        }
-
-        if (start > end) {
-            throw new RuntimeException("NIN range start must not be greater than end");
-        }
+        validateJobName(jobName);
+        validateRange(start, end);
 
         EntityDefinition def = entityDefinitionRegistry.get(jobName);
 
@@ -96,6 +83,38 @@ public class ParallelNinProcessorService {
                 jobName, start, end);
     }
 
+    /**
+     * New logic:
+     * process one job for all beneficiaries without range.
+     */
+    public void processInParallel(String jobName) {
+        validateJobName(jobName);
+
+        EntityDefinition def = entityDefinitionRegistry.get(jobName);
+
+        log.info("Starting full parallel processing for jobName={}", jobName);
+
+        processAllBeneficiaries(jobName, def);
+
+        log.info("Completed full parallel processing for jobName={}", jobName);
+    }
+
+    private void validateJobName(String jobName) {
+        if (jobName == null || jobName.trim().isEmpty()) {
+            throw new RuntimeException("Job name must not be null or blank");
+        }
+    }
+
+    private void validateRange(Long start, Long end) {
+        if (start == null || end == null) {
+            throw new RuntimeException("NIN range start/end must not be null");
+        }
+
+        if (start > end) {
+            throw new RuntimeException("NIN range start must not be greater than end");
+        }
+    }
+
     private void processOneRange(String jobName,
                                  EntityDefinition def,
                                  Long rangeStart,
@@ -116,60 +135,83 @@ public class ParallelNinProcessorService {
                 break;
             }
 
-            log.info("Processing page {} in range window {} - {} for jobName={} with {} beneficiary record(s)",
-                    pageNumber, rangeStart, rangeEnd, jobName, page.getNumberOfElements());
-
-            List<CompletableFuture<Map<String, Object>>> futures =
-                    new ArrayList<>();
-
-            for (BeneficiaryEntity beneficiary : page.getContent()) {
-                final Long nin = beneficiary.getNin();
-
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    try {
-                        Map<String, Object> response = dynamicJobApiService.callApi(jobName, nin);
-                        return normalizeRowByXml(def, response);
-                    } catch (Exception e) {
-                        log.error("Failed processing NIN={} for jobName={}. Error={}",
-                                nin, jobName, e.getMessage(), e);
-                        return null;
-                    }
-                }, executorService));
-            }
-
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-            List<Map<String, Object>> pageResults = new ArrayList<>();
-
-            for (CompletableFuture<Map<String, Object>> future : futures) {
-                Map<String, Object> result = future.join();
-
-                if (result != null) {
-                    pageResults.add(result);
-                }
-            }
-
-            if (!pageResults.isEmpty()) {
-                genericEntityRepository.insertAllRows(def, pageResults);
-                log.info("Saved {} row(s) for jobName={} in page={}",
-                        pageResults.size(), jobName, pageNumber);
-            }
+            processBeneficiaryPage(jobName, def, page, pageNumber);
 
             pageNumber++;
         }
     }
 
     /**
-     * Keeps only XML-defined fields and creates one normalized row map.
-     *
-     * Example:
-     * XML fields:
-     * - nationalId
-     * - firstName
-     * - dob
-     *
-     * API response may contain many keys, but this method only keeps XML fields.
+     * New method for processing all beneficiaries page by page.
      */
+    private void processAllBeneficiaries(String jobName, EntityDefinition def) {
+        int pageNumber = 0;
+
+        while (true) {
+            Page<BeneficiaryEntity> page =
+                    beneficiaryRepo.findAll(PageRequest.of(pageNumber, chunkSize));
+
+            if (!page.hasContent()) {
+                log.info("No more beneficiaries found for full jobName={}", jobName);
+                break;
+            }
+
+            processBeneficiaryPage(jobName, def, page, pageNumber);
+
+            pageNumber++;
+        }
+    }
+
+    /**
+     * Shared page processor used by both:
+     * - range execution
+     * - full execution
+     */
+    private void processBeneficiaryPage(String jobName,
+                                        EntityDefinition def,
+                                        Page<BeneficiaryEntity> page,
+                                        int pageNumber) {
+
+        log.info("Processing page {} for jobName={} with {} beneficiary record(s)",
+                pageNumber, jobName, page.getNumberOfElements());
+
+        List<CompletableFuture<Map<String, Object>>> futures =
+                new ArrayList<CompletableFuture<Map<String, Object>>>();
+
+        for (BeneficiaryEntity beneficiary : page.getContent()) {
+            final Long nin = beneficiary.getNin();
+
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                try {
+                    Map<String, Object> response = dynamicCallService.callApi(jobName, nin);
+                    return normalizeRowByXml(def, response);
+                } catch (Exception e) {
+                    log.error("Failed processing NIN={} for jobName={}. Error={}",
+                            nin, jobName, e.getMessage(), e);
+                    return null;
+                }
+            }, executorService));
+        }
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        List<Map<String, Object>> pageResults = new ArrayList<Map<String, Object>>();
+
+        for (CompletableFuture<Map<String, Object>> future : futures) {
+            Map<String, Object> result = future.join();
+
+            if (result != null) {
+                pageResults.add(result);
+            }
+        }
+
+        if (!pageResults.isEmpty()) {
+            genericEntityRepository.insertAllRows(def, pageResults);
+            log.info("Saved {} row(s) for jobName={} in page={}",
+                    pageResults.size(), jobName, pageNumber);
+        }
+    }
+
     private Map<String, Object> normalizeRowByXml(EntityDefinition def, Map<String, Object> response) {
         Map<String, Object> row = new LinkedHashMap<String, Object>();
 
