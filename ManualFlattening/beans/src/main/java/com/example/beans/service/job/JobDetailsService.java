@@ -7,24 +7,26 @@ import org.springframework.stereotype.Service;
 @Service
 public class JobDetailsService {
 
-    private final JobDetailsJpaRepository jobDetailsJpaRepository;
+    private final JobDetailsJpaRepository jobDetailsRepository;
 
-    public JobDetailsService(JobDetailsJpaRepository jobDetailsJpaRepository) {
-        this.jobDetailsJpaRepository = jobDetailsJpaRepository;
+    /**
+     * Creates the service with the required repository dependency.
+     *
+     * @param jobDetailsRepository repository for job details
+     */
+    public JobDetailsService(JobDetailsJpaRepository jobDetailsRepository) {
+        this.jobDetailsRepository = jobDetailsRepository;
     }
 
+    /**
+     * Returns the job details for the given job id.
+     *
+     * @param jobId job identifier
+     * @return job details entity
+     */
     public JobDetailsEntity getJobRequired(Long jobId) {
-        return jobDetailsJpaRepository.findById(jobId)
-                .orElseThrow(() -> new RuntimeException("Job not found for id: " + jobId));
+        return jobDetailsRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("Job not found for id: " + jobId));
     }
 
-    public String getJobNameRequired(Long jobId) {
-        JobDetailsEntity job = getJobRequired(jobId);
-
-        if (job.getJobName() == null || job.getJobName().trim().isEmpty()) {
-            throw new RuntimeException("Job name is missing for job id: " + jobId);
-        }
-
-        return job.getJobName();
-    }
 }

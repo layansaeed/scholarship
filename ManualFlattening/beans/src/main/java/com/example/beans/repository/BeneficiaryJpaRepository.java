@@ -21,6 +21,6 @@ public interface BeneficiaryJpaRepository extends JpaRepository<BeneficiaryEntit
             @Param("end") Long end
     );
 
-    //Because now we fetch beneficiaries page by page from repository, not all NINs at once.
-    Page<BeneficiaryEntity> findAllByOrderByNinAsc(Pageable pageable);
+//    //Because now we fetch beneficiaries page by page from repository, not all NINs at once.
+//    Page<BeneficiaryEntity> findAllByOrderByNinAsc(Pageable pageable);
 }

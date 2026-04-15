@@ -42,9 +42,9 @@ public class XMLBeanLoaderService {
     public void loadBeansFromXML() throws Exception {
         log.info("Loading entity definitions from XML: {}", entitiesConfigPath);
 
-        Resource resource = context.getResource(entitiesConfigPath);
+        Resource resource = context.getResource("file:"+entitiesConfigPath);
         if (!resource.exists()) {
-            throw new RuntimeException("entities-config.xml not found in classpath!");
+            throw new RuntimeException("entities-config.xml not found at path: " + entitiesConfigPath);
         }
 
         Document doc = parseXMLDocument(resource);
@@ -59,9 +59,8 @@ public class XMLBeanLoaderService {
             registry.put(def);
 
             loaded++;
-            int rowsCount = (def.getRows() == null) ? 0 : def.getRows().size();
-            log.info("Loaded entity '{}' -> table '{}' with {} row(s) in XML",
-                    def.getEntityName(), def.getFullTableName(), rowsCount);
+            log.info("Loaded entity '{}' -> table '{}'",
+                    def.getEntityName(), def.getFullTableName());
         }
 
         log.info("XML loading complete. Total entities loaded: {}", loaded);

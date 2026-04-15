@@ -12,10 +12,9 @@
     </parent>
 
     <groupId>com.example</groupId>
-    <artifactId>beans</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <name>beans</name>
-    <description>Demo project for Spring Boot</description>
+    <artifactId>job-executor</artifactId>
+    <version>1.0</version>
+    <description>project for Job Execution</description>
 
     <properties>
         <java.version>21</java.version>
@@ -47,6 +46,12 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-configuration2</artifactId>
             <version>2.14.0</version>
+<!--            <exclusions>-->
+<!--                <exclusion>-->
+<!--                    <groupId>commons-logging</groupId>-->
+<!--                    <artifactId>commons-logging</artifactId>-->
+<!--                </exclusion>-->
+<!--            </exclusions>-->
         </dependency>
 
         <dependency>

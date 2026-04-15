@@ -30,9 +30,27 @@ public class BeanJob {
     @PostConstruct
     public void run() {
         try {
-            log.info("Starting BeanJob to load XML entity...");
             xmlLoader.loadBeansFromXML();
-            log.info(" XML loading complete into BeanJob: Loaded {} entity definition(s).", registry.getAll().size());
+
+
+        } catch (Exception e) {
+            log.error("Startup failed: {}", e.getMessage(), e);
+            throw new RuntimeException("Startup failed", e);
+        }
+    }
+
+    public void reloadbeans() {
+        try {
+            log.info("Starting BeanJob to -Reload- XML entity...");
+            log.info(" Before delete: Loaded {} entity definition(s).", registry.getAll().size());
+
+            registry.getAll().clear();
+            log.info(" After delete: Loaded {} entity definition(s).", registry.getAll().size());
+
+            xmlLoader.loadBeansFromXML();
+
+            log.info(" After load: XML loading complete into BeanJob: Loaded {} entity definition(s).",
+                    registry.getAll().size());
 
         } catch (Exception e) {
             log.error("Startup failed: {}", e.getMessage(), e);

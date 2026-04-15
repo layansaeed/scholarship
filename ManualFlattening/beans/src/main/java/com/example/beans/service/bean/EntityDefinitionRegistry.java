@@ -53,7 +53,7 @@ public class EntityDefinitionRegistry {
      * @return unmodifiable map of entityName -> EntityDefinition
      */
     public Map<String, EntityDefinition> getAll() {
-        return Collections.unmodifiableMap(entities);
+        return (entities);
     }
 
 }

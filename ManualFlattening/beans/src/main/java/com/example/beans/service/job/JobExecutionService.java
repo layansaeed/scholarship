@@ -1,41 +1,65 @@
 package com.example.beans.service.job;
 
 import com.example.beans.constant.ExecutionStatus;
+import com.example.beans.model.JobDetailsEntity;
 import com.example.beans.model.JobExecutorBatchRequest;
 import com.example.beans.model.JobExecutionEntity;
 import com.example.beans.model.JobExecutorRequest;
 import com.example.beans.repository.JobExecutionJpaRepository;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Slf4j
 @Service
 public class JobExecutionService {
 
+    private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
+
     private final JobExecutionJpaRepository jobExecutionRepository;
-    private final ParallelNinProcessorService parallelNinProcessorService;
+    private final RangePaginationProcessorService rangePaginationProcessorService;
     private final JobDetailsService jobDetailsService;
     private final JobAuditService jobAuditService;
 
+    /**
+     * Creates the service with required dependencies.
+     *
+     * @param jobExecutionRepository repository for job executions
+     * @param rangePaginationProcessorService service for range processing
+     * @param jobDetailsService service for job details
+     * @param jobAuditService service for audit updates
+     */
     public JobExecutionService(JobExecutionJpaRepository jobExecutionRepository,
-                               ParallelNinProcessorService parallelNinProcessorService, JobDetailsService jobDetailsService, JobAuditService jobAuditService) {
+                               RangePaginationProcessorService rangePaginationProcessorService,
+                               JobDetailsService jobDetailsService,
+                               JobAuditService jobAuditService) {
         this.jobExecutionRepository = jobExecutionRepository;
-        this.parallelNinProcessorService = parallelNinProcessorService;
+        this.rangePaginationProcessorService = rangePaginationProcessorService;
         this.jobDetailsService = jobDetailsService;
         this.jobAuditService = jobAuditService;
     }
 
+    /**
+     * Runs multiple jobs based on execution ids.
+     *
+     * @param request batch request containing execution ids
+     */
     public void runJobsByExecutionIds(JobExecutorBatchRequest request) {
         List<JobExecutionEntity> executions = loadExecutions(request);
         executeJobs(executions);
     }
 
+    /**
+     * Loads execution entities from the request.
+     *
+     * @param request batch request
+     * @return list of execution entities
+     */
     private List<JobExecutionEntity> loadExecutions(JobExecutorBatchRequest request) {
         if (request == null || request.getJobs() == null || request.getJobs().isEmpty()) {
-            throw new RuntimeException("Job request is empty");
+            throw new IllegalArgumentException("Job request must not be empty");
         }
 
         List<JobExecutionEntity> executions = new ArrayList<>();
@@ -44,13 +68,13 @@ public class JobExecutionService {
             Long executionId = executionRequest.getExecutionId();
 
             if (executionId == null) {
-                throw new RuntimeException("Execution id must not be null");
+                throw new IllegalArgumentException("Execution id must not be null");
             }
 
-            log.info("Loading execution id={}", executionId);
+            logger.info("Loading execution id={}", executionId);
 
             JobExecutionEntity execution = jobExecutionRepository.findById(executionId)
-                    .orElseThrow(() -> new RuntimeException("Execution not found for id: " + executionId));
+                    .orElseThrow(() -> new IllegalArgumentException("Execution not found for id: " + executionId));
 
             executions.add(execution);
         }
@@ -58,6 +82,11 @@ public class JobExecutionService {
         return executions;
     }
 
+    /**
+     * Executes each job execution.
+     *
+     * @param executions list of job execution entities
+     */
     private void executeJobs(List<JobExecutionEntity> executions) {
         for (JobExecutionEntity execution : executions) {
             Long executionId = execution.getExecutionId();
@@ -68,74 +97,51 @@ public class JobExecutionService {
                 Long start = execution.getNinRangeStart();
                 Long end = execution.getNinRangeEnd();
 
-//                if (auditId == null) {
-//                    throw new RuntimeException("Audit id is missing for execution id: " + executionId);
-//                }
-//
-//                if (jobName == null || jobName.trim().isEmpty()) {
-//                    throw new RuntimeException("Job name is missing for execution id: " + executionId);
-//                }
-//
-//                if (start == null || end == null) {
-//                    throw new RuntimeException("NIN range start/end is missing for execution id: " + executionId);
-//                }
-
                 jobAuditService.updateStatus(auditId, ExecutionStatus.PROCESSING);
 
-                log.info("Executing executionId={}, auditId={}, jobName={}, start={}, end={}",
+                logger.info("Executing executionId={}, auditId={}, jobName={}, start={}, end={}",
                         executionId, auditId, jobName, start, end);
 
-                parallelNinProcessorService.processInParallel(jobName, start, end);
+                rangePaginationProcessorService.processFullRange(jobName, start, end);
 
                 jobAuditService.updateStatus(auditId, ExecutionStatus.SUCCEEDED);
 
-            } catch (Exception e) {
+            } catch (Exception exception) {
                 if (auditId != null) {
                     jobAuditService.updateStatus(auditId, ExecutionStatus.FAILED);
                 }
-                log.error("Failed executionId={}, auditId={}", executionId, auditId, e);
-                throw e;
+
+                logger.error("Failed executionId={}, auditId={}", executionId, auditId, exception);
+                throw exception;
             }
         }
     }
+
     /**
-     * New logic:
-     * run one full job using jobId only
+     * Runs a full job using only the job id.
+     *
+     * @param jobId job identifier
      */
     public void runFullJobByJobId(Long jobId) {
         if (jobId == null) {
-            throw new RuntimeException("Job id must not be null");
+            throw new IllegalArgumentException("Job id must not be null");
         }
 
-        JobExecutionEntity execution = jobExecutionRepository.findFirstByJobId(jobId)
-                .orElseThrow(() -> new RuntimeException("Execution not found for job id: " + jobId));
-
-        Long auditId = execution.getAuditId();
-        String jobName = execution.getJobName();
-
-        if (auditId == null) {
-            throw new RuntimeException("Audit id is missing for job id: " + jobId);
-        }
+        JobDetailsEntity jobDetails = jobDetailsService.getJobRequired(jobId);
+        String jobName = jobDetails.getJobName();
 
         if (jobName == null || jobName.trim().isEmpty()) {
-            throw new RuntimeException("Job name is missing for job id: " + jobId);
+            throw new IllegalArgumentException("Job name is missing for job id: " + jobId);
         }
 
         try {
-            log.info("Executing full job for jobId={}, auditId={}, jobName={}", jobId, auditId, jobName);
+            logger.info("Executing full job for jobId={}, jobName={}", jobId, jobName);
 
-            jobAuditService.updateStatus(auditId, ExecutionStatus.PROCESSING);
+            rangePaginationProcessorService.processAll(jobName);
 
-            parallelNinProcessorService.processInParallel(jobName);
-
-            jobAuditService.updateStatus(auditId, ExecutionStatus.SUCCEEDED);
-
-        } catch (Exception e) {
-            jobAuditService.updateStatus(auditId, ExecutionStatus.FAILED);
-            log.error("Failed full job for jobId={}, auditId={}", jobId, auditId, e);
-            throw e;
+        } catch (Exception exception) {
+            logger.error("Failed full job for jobId={}", jobId, exception);
+            throw exception;
         }
     }
-
-
 }

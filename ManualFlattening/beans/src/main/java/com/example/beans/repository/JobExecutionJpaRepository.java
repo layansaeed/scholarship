@@ -8,5 +8,4 @@ import java.util.Optional;
 
 @Repository
 public interface JobExecutionJpaRepository extends JpaRepository<JobExecutionEntity, Long> {
-    Optional<JobExecutionEntity> findFirstByJobId(Long jobId);
 }

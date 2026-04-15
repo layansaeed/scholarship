@@ -19,19 +19,6 @@ public class JobExecutionAuditEntity {
     @Column(name = "AUDIT_ID")
     private Long auditId;
 
-//    /**
-//     * Many audit rows belong to one job
-//     */
-//    @ManyToOne(fetch = FetchType.EAGER)
-//    @JoinColumn(name = "JOB_ID", nullable = false, foreignKey = @ForeignKey(name = "FK_AUDIT_JOB"))
-//    private JobDetailsEntity job;
-//
-//    @Column(name = "NIN_RANGE_START")
-//    private Long ninRangeStart;
-//
-//    @Column(name = "NIN_RANGE_END")
-//    private Long ninRangeEnd;
-
     /**
      * Many audit rows have one status from JOB_EXECUTION_STATUS
      */
@@ -39,14 +26,7 @@ public class JobExecutionAuditEntity {
     @JoinColumn(name = "STATUS", referencedColumnName = "STATUS", nullable = false, foreignKey = @ForeignKey(name = "FK_AUDIT_STATUS"))
     private JobExecutionStatus status;
 
-
     @Column(name = "END_TIME")
     private LocalDateTime endTime;
-//
-//    @Column(name = "RECORD_COUNT")
-//    private Integer recordCount;
-//
-//    @Column(name = "CONSUMED_BY")
-//    private String consumedBy;
 
 }
