@@ -132,6 +132,7 @@ public class Config {
             return matchingProperties;
         }
 
+        //this table acts as version of application.properties but in DB
         private String getConfigTableFullName() {
             return getRequiredEnvironmentValue(CONFIG_TABLE_SCHEMA)
                     + "."
