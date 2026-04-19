@@ -47,6 +47,7 @@ public class Config {
         private static final String CONFIG_TABLE_VALUE_COLUMN = "config.table.value-column";
 
         private Environment env;
+        //store all keys in DB to search for keys by prefix
         private String[] loadedPropertyNames = new String[0];
 
         @Bean
@@ -67,7 +68,9 @@ public class Config {
                 PropertiesPropertySource dbPropertySource =
                         new PropertiesPropertySource("dbPropertySource", dbProperties);
 
+                //all records in env with prefix
                 propertySources.addFirst(dbPropertySource);
+                //all keys in this list with prefix
                 this.loadedPropertyNames = dbPropertySource.getPropertyNames();
 
                 log.info("Loaded {} properties from {}", loadedPropertyNames.length, getConfigTableFullName());
@@ -76,7 +79,7 @@ public class Config {
                 log.error("Failed to load DB properties from {}", getConfigTableFullName(), e);
                 throw new IllegalStateException("Failed to load DB configuration properties", e);
             }
-
+            //continue the normal property placeholder work
             super.postProcessBeanFactory(beanFactory);
         }
 
@@ -120,9 +123,10 @@ public class Config {
             return dataSource;
         }
 
+        //return not clean map
         public Map<String, String> getPropertiesStartingWith(String prefix) {
             Map<String, String> matchingProperties = new LinkedHashMap<>();
-
+            //loop all keys in DB but store just rows related to job name
             for (String propertyName : loadedPropertyNames) {
                 if (propertyName.startsWith(prefix)) {
                     matchingProperties.put(propertyName, env.getProperty(propertyName));

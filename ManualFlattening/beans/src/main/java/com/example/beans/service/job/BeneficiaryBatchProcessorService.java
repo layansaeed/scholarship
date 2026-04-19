@@ -23,7 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
-public class RangePaginationProcessorService {
+public class BeneficiaryBatchProcessorService {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
 
@@ -45,7 +45,7 @@ public class RangePaginationProcessorService {
      * @param entityDefinitionRegistry registry for entity definitions
      * @param genericEntityRepository repository for dynamic insert operations
      */
-    public RangePaginationProcessorService(
+    public BeneficiaryBatchProcessorService(
             @Value("${job.db.chunk}") int databaseChunkSize,
             @Value("${job.range.chunk}") long rangeChunkSize,
             BeneficiaryJpaRepository beneficiaryRepository,
@@ -69,7 +69,7 @@ public class RangePaginationProcessorService {
      * @param start range start value
      * @param end range end value
      */
-    public void processFullRange(String jobName, Long start, Long end) {
+    public void processByRange(String jobName, Long start, Long end) {
         validateJobName(jobName);
         validateRange(start, end);
 
@@ -87,7 +87,7 @@ public class RangePaginationProcessorService {
                 currentRangeEnd = end;
             }
 
-            processRangeChunk(jobName,
+            processChunk(jobName,
                     entityDefinition,
                     currentRangeStart,
                     currentRangeEnd);
@@ -106,10 +106,10 @@ public class RangePaginationProcessorService {
      * @param rangeStart current range chunk start
      * @param rangeEnd current range chunk end
      */
-    private void processRangeChunk(String jobName,
-                                   EntityDefinition entityDefinition,
-                                   Long rangeStart,
-                                   Long rangeEnd) {
+    private void processChunk(String jobName,
+                              EntityDefinition entityDefinition,
+                              Long rangeStart,
+                              Long rangeEnd) {
 
         int pageNumber = 0;
 
@@ -130,7 +130,7 @@ public class RangePaginationProcessorService {
                 break;
             }
 
-            processBeneficiaryPage(jobName,
+            processPage(jobName,
                     entityDefinition,
                     beneficiaryPage,
                     pageNumber);
@@ -142,16 +142,16 @@ public class RangePaginationProcessorService {
 
     /**
      * Processes one page of beneficiaries in parallel.
-     * shared method btw processRangeChunk & processAllBeneficiaries -> split pages then processBeneficiary in each page
+     * shared method btw processChunk & fetchAndProcessAllPages -> split pages then processBeneficiary in each page
      * @param jobName job name used for processing
      * @param entityDefinition entity definition for the target table
      * @param beneficiaryPage current beneficiary page
      * @param pageNumber current page number
      */
-    private void processBeneficiaryPage(String jobName,
-                                        EntityDefinition entityDefinition,
-                                        Page<BeneficiaryEntity> beneficiaryPage,
-                                        int pageNumber) {
+    private void processPage(String jobName,
+                             EntityDefinition entityDefinition,
+                             Page<BeneficiaryEntity> beneficiaryPage,
+                             int pageNumber) {
 
         logger.info("Processing page {} for jobName={} with {} beneficiary record(s)",
                 pageNumber, jobName, beneficiaryPage.getNumberOfElements());
@@ -165,7 +165,7 @@ public class RangePaginationProcessorService {
                 try {
                     Map<String, Object> response =
                             dynamicCallService.callApi(jobName, nin);
-                    return mapResponseRow(entityDefinition, response);
+                    return toEntityRow(entityDefinition, response);
                 } catch (Exception exception) {
                     logger.error("Failed processing NIN={} for jobName={}. Error={}",
                             nin, jobName, exception.getMessage(), exception);
@@ -200,8 +200,8 @@ public class RangePaginationProcessorService {
      * @param response API response body
      * @return mapped row
      */
-    private Map<String, Object> mapResponseRow(EntityDefinition entityDefinition,
-                                               Map<String, Object> response) {
+    private Map<String, Object> toEntityRow(EntityDefinition entityDefinition,
+                                            Map<String, Object> response) {
         Map<String, Object> row = new LinkedHashMap<>();
 
         for (String fieldName : entityDefinition.getFieldMapping().keySet()) {
@@ -210,30 +210,30 @@ public class RangePaginationProcessorService {
 
         return row;
     }
+    //-----
     /**
      * Processes all beneficiaries without using a range.
      *
      * @param jobName job name used to load configuration
      */
-    public void processAll(String jobName) {
+    public void processAllBeneficiaries(String jobName) {
         validateJobName(jobName);
 
         EntityDefinition entityDefinition = entityDefinitionRegistry.get(jobName);
 
         logger.info("Starting full parallel processing for jobName={}", jobName);
 
-        processAllBeneficiaries(jobName, entityDefinition);
+        fetchAndProcessAllPages(jobName, entityDefinition);
 
         logger.info("Completed full parallel processing for jobName={}", jobName);
     }
 
     /**
      * Processes all beneficiaries page by page.
-     *
      * @param jobName job name used for processing
      * @param entityDefinition entity definition for the target table
      */
-    private void processAllBeneficiaries(String jobName,
+    private void fetchAndProcessAllPages(String jobName,
                                          EntityDefinition entityDefinition) {
         int pageNumber = 0;
 
@@ -247,7 +247,7 @@ public class RangePaginationProcessorService {
                 break;
             }
 
-            processBeneficiaryPage(jobName,
+            processPage(jobName,
                     entityDefinition,
                     beneficiaryPage,
                     pageNumber);

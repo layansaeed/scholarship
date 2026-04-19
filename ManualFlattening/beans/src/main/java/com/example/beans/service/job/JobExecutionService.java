@@ -19,7 +19,7 @@ public class JobExecutionService {
     private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
 
     private final JobExecutionJpaRepository jobExecutionRepository;
-    private final RangePaginationProcessorService rangePaginationProcessorService;
+    private final BeneficiaryBatchProcessorService beneficiaryBatchProcessorService;
     private final JobDetailsService jobDetailsService;
     private final JobAuditService jobAuditService;
 
@@ -27,16 +27,16 @@ public class JobExecutionService {
      * Creates the service with required dependencies.
      *
      * @param jobExecutionRepository repository for job executions
-     * @param rangePaginationProcessorService service for range processing
+     * @param beneficiaryBatchProcessorService service for range processing
      * @param jobDetailsService service for job details
      * @param jobAuditService service for audit updates
      */
     public JobExecutionService(JobExecutionJpaRepository jobExecutionRepository,
-                               RangePaginationProcessorService rangePaginationProcessorService,
+                               BeneficiaryBatchProcessorService beneficiaryBatchProcessorService,
                                JobDetailsService jobDetailsService,
                                JobAuditService jobAuditService) {
         this.jobExecutionRepository = jobExecutionRepository;
-        this.rangePaginationProcessorService = rangePaginationProcessorService;
+        this.beneficiaryBatchProcessorService = beneficiaryBatchProcessorService;
         this.jobDetailsService = jobDetailsService;
         this.jobAuditService = jobAuditService;
     }
@@ -102,7 +102,7 @@ public class JobExecutionService {
                 logger.info("Executing executionId={}, auditId={}, jobName={}, start={}, end={}",
                         executionId, auditId, jobName, start, end);
 
-                rangePaginationProcessorService.processFullRange(jobName, start, end);
+                beneficiaryBatchProcessorService.processByRange(jobName, start, end);
 
                 jobAuditService.updateStatus(auditId, ExecutionStatus.SUCCEEDED);
 
@@ -137,7 +137,7 @@ public class JobExecutionService {
         try {
             logger.info("Executing full job for jobId={}, jobName={}", jobId, jobName);
 
-            rangePaginationProcessorService.processAll(jobName);
+            beneficiaryBatchProcessorService.processAllBeneficiaries(jobName);
 
         } catch (Exception exception) {
             logger.error("Failed full job for jobId={}", jobId, exception);
