@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import sa.nrd.job.execute.config.Config;
 import sa.nrd.job.execute.service.bean.EntityDefinitionRegistry;
 import sa.nrd.job.execute.service.bean.XMLBeanLoaderService;
 
@@ -14,13 +15,15 @@ public class BeanJob {
 
     private final XMLBeanLoaderService xmlLoader;
     private final EntityDefinitionRegistry registry;
+    private final Config.PropertySourceConfig propertySourceConfig;
 
     private volatile boolean jobRunning;
     private volatile boolean reloadPending;
 
-    public BeanJob(XMLBeanLoaderService xmlLoader, EntityDefinitionRegistry registry) {
+    public BeanJob(XMLBeanLoaderService xmlLoader, EntityDefinitionRegistry registry, Config.PropertySourceConfig propertySourceConfig) {
         this.xmlLoader = xmlLoader;
         this.registry = registry;
+        this.propertySourceConfig = propertySourceConfig;
     }
 
     /**
@@ -77,12 +80,18 @@ public class BeanJob {
      */
     public void reloadBeans() {
         try {
-            logger.info("Starting XML reload");
+            logger.info("Starting full reload for DB config and XML definitions");
+
+            //reload latest DB config from config table
+            propertySourceConfig.reloadDatabaseProperties();
+
             logger.info("Before delete: Loaded {} entity definition(s)", registry.getAll().size());
 
+            //clear old XML entity definitions
             registry.getAll().clear();
             logger.info("After delete: Loaded {} entity definition(s)", registry.getAll().size());
 
+            //reload new XML entity definitions
             xmlLoader.loadBeansFromXML();
 
             logger.info("After load: Loaded {} entity definition(s)", registry.getAll().size());
@@ -92,6 +101,7 @@ public class BeanJob {
             throw new RuntimeException("Reload failed", exception);
         }
     }
+
 //
 //    /**
 //     * Returns whether a job is currently running.

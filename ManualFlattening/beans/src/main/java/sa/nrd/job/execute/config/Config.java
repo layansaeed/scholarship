@@ -33,6 +33,8 @@ public class Config {
 
     @Configuration
     public static class PropertySourceConfig extends PropertySourcesPlaceholderConfigurer {
+        private ConfigurableEnvironment configurableEnvironment;
+        private static final String DB_PROPERTY_SOURCE_NAME = "dbPropertySource";
 
         private static final Logger log = LoggerFactory.getLogger(PropertySourceConfig.class);
 
@@ -58,23 +60,10 @@ public class Config {
         @Override
         public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
             this.env = beanFactory.getBean(Environment.class);
-
-            MutablePropertySources propertySources =
-                    ((ConfigurableEnvironment) env).getPropertySources();
+            this.configurableEnvironment = (ConfigurableEnvironment) this.env;
 
             try {
-                Properties dbProperties = loadDatabaseProperties();
-
-                PropertiesPropertySource dbPropertySource =
-                        new PropertiesPropertySource("dbPropertySource", dbProperties);
-
-                //all records in env with prefix
-                propertySources.addFirst(dbPropertySource);
-                //all keys in this list with prefix
-                this.loadedPropertyNames = dbPropertySource.getPropertyNames();
-
-                log.info("Loaded {} properties from {}", loadedPropertyNames.length, getConfigTableFullName());
-
+                reloadDatabaseProperties();
             } catch (Exception e) {
                 log.error("Failed to load DB properties from {}", getConfigTableFullName(), e);
                 throw new IllegalStateException("Failed to load DB configuration properties", e);
@@ -111,6 +100,41 @@ public class Config {
 
             } finally {
                 dataSource.close();
+            }
+        }
+
+        //synchronized to avoid two threads trying to reload DB config at the same time
+        //watcher triggers reload or another request also tries reload
+        //shared method (at startup / later during runtime)
+        public synchronized void reloadDatabaseProperties() {
+            try {
+                //read latest config rows again from DB
+                //convert DB rows into java Properties object
+                Properties dbProperties = loadDatabaseProperties();
+
+                //rebuild the DB property source
+                //wrap DB properties as PropertySource to enable env to deal with it
+                PropertiesPropertySource dbPropertySource =
+                        new PropertiesPropertySource(DB_PROPERTY_SOURCE_NAME, dbProperties);
+
+                MutablePropertySources propertySources = configurableEnvironment.getPropertySources();
+
+                //replace or add PropertySource in environment
+                if (propertySources.contains(DB_PROPERTY_SOURCE_NAME)) {
+                    propertySources.replace(DB_PROPERTY_SOURCE_NAME, dbPropertySource);
+                } else {
+                    //add PropertySource in environment
+                    propertySources.addFirst(dbPropertySource);
+                }
+
+                //refresh loadedPropertyNames
+                this.loadedPropertyNames = dbPropertySource.getPropertyNames();
+
+                log.info("Reloaded {} properties from {}", loadedPropertyNames.length, getConfigTableFullName());
+
+            } catch (Exception e) {
+                log.error("Failed to reload DB properties from {}", getConfigTableFullName(), e);
+                throw new IllegalStateException("Failed to reload DB configuration properties", e);
             }
         }
 
