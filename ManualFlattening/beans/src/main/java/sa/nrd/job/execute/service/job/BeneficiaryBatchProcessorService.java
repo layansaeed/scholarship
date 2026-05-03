@@ -167,6 +167,7 @@ public class BeneficiaryBatchProcessorService {
                             dynamicCallService.callApi(jobName, nin);
                     return toEntityRow(entityDefinition, response);
                 } catch (Exception exception) {
+                    // error happens → not handled inside callApi → exception thrown outside
                     logger.error("Failed processing NIN={} for jobName={}. Error={}",
                             nin, jobName, exception.getMessage(), exception);
                     return null;

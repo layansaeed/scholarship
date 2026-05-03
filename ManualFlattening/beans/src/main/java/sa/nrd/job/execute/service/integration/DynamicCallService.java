@@ -2,21 +2,13 @@ package sa.nrd.job.execute.service.integration;
 
 import sa.nrd.job.execute.constant.DynamicCallConstants;
 import sa.nrd.job.execute.service.job.JobConfigService;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.HttpStatusCodeException;
-import org.springframework.web.client.RestTemplate;
-
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,43 +18,63 @@ public class DynamicCallService {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
 
-    private final RestTemplate restTemplate;
+    private final RetryableApiExecutorService retryableApiExecutorService;
     private final JobConfigService jobConfigService;
 
-    public DynamicCallService(RestTemplate restTemplate, JobConfigService jobConfigService) {
-        this.restTemplate = restTemplate;
+    public DynamicCallService(RetryableApiExecutorService retryableApiExecutorService, JobConfigService jobConfigService) {
+        this.retryableApiExecutorService = retryableApiExecutorService;
         this.jobConfigService = jobConfigService;
     }
+
 
     /**
      * Calls the external API for the given job and NIN.
      * Always returns one map ready for storing.
      */
     public Map<String, Object> callApi(String jobName, Long nin) {
-        Map<String, String> config = jobConfigService.getConfigMap(jobName);
-
         try {
+            Map<String, String> config = jobConfigService.getConfigMap(jobName);
+
             String url = buildUrl(config);
             HttpMethod httpMethod = buildHttpMethod(config);
             HttpHeaders headers = buildHeaders(config);
             Map<String, Object> requestBody = buildRequestBody(nin);
             HttpEntity<Map<String, Object>> requestEntity = buildRequestEntity(headers, requestBody);
 
-            ResponseEntity<Map> restResponse =
-                    executeRequest(jobName, nin, url, httpMethod, requestEntity);
+            return retryableApiExecutorService.executeWithRetry(
+                    jobName,
+                    nin,
+                    url,
+                    httpMethod,
+                    requestEntity
+            );
 
-            logger.debug("Successfully retrieved response for jobName={} nin={}", jobName, nin);
+        } catch (Exception exception) {
+            logger.debug("Failed before/while calling API for jobName [{}] nin [{}] exception [{}]",
+                    jobName,
+                    nin,
+                    exception.getMessage());
 
-            return prepareSuccessResponse(restResponse);
-
-        } catch (Exception e) {
-            logger.debug("Inside Exception for jobName [{}] nin [{}] Exception is [{}]",
-                    jobName, nin, e.getMessage());
-
-            return prepareErrorResponse(e);
+            return prepareLocalErrorResponse(exception);
+            //callApi(...) still returns a Map-> So it will not go to the CompletableFuture catch.
+            //prepareLocalErrorResponse(...) prevents the outer catch in CompletableFuture from running.
         }
     }
 
+    /**
+     * Handles errors that happen before reaching the retryable API executor,
+     * such as missing config, invalid HTTP method, invalid media type.
+     */
+    private Map<String, Object> prepareLocalErrorResponse(Exception exception) {
+        Map<String, Object> responseBody = new LinkedHashMap<>();
+
+        responseBody.put("failure", true);
+        responseBody.put("message", exception.getMessage());
+        responseBody.put("statusCode", null);
+        responseBody.put("errorCode", null);
+
+        return responseBody;
+    }
     /**
      * Builds the request URL from configuration.
      */
@@ -143,85 +155,16 @@ public class DynamicCallService {
      * Executes the external API request.
      * Does not swallow the exception.
      */
-    private ResponseEntity<Map> executeRequest(String jobName,
-                                               Long nin,
-                                               String url,
-                                               HttpMethod httpMethod,
-                                               HttpEntity<Map<String, Object>> requestEntity) {
-        logger.info("Calling API for jobName={} url={} nin={}", jobName, url, nin);
-        //Thread.sleep(500);
-        return restTemplate.exchange(url, httpMethod, requestEntity, Map.class);
-    }
-
-    /**
-     * Prepares final map for success case.
-     */
-    private Map<String, Object> prepareSuccessResponse(ResponseEntity<Map> restResponse) {
-        //real data
-        Map<String, Object> responseBody = restResponse.getBody();
-
-        if (responseBody == null) {
-            responseBody = new LinkedHashMap<>();
-        } else {
-            responseBody = new LinkedHashMap<>(responseBody);
-        }
-
-        responseBody.put("failure", false);
-        responseBody.put("message", null);
-        responseBody.put("errorCode", null);
-        responseBody.put("statusCode", String.valueOf(restResponse.getStatusCode().value()));
-
-        return responseBody;
-    }
-
-    /**
-     * Prepares final map for error case in standard company style.
-     */
-    private Map<String, Object> prepareErrorResponse(Exception exception) {
-        Map<String, Object> responseBody = new LinkedHashMap<>();
-
-        if (exception instanceof HttpClientErrorException || exception instanceof HttpServerErrorException) {
-            HttpStatusCodeException httpEx = (HttpStatusCodeException) exception;
-
-            String statusCode = String.valueOf(httpEx.getRawStatusCode());
-            String responseText = httpEx.getResponseBodyAsString();
-//            String errorCode = extractErrorCode(responseText, statusCode);
-
-            responseBody.put("failure", true);
-            responseBody.put("message",  responseText);
-          //  responseBody.put("errorCode", errorCode);
-            responseBody.put("statusCode", String.valueOf(httpEx.getRawStatusCode()));
-
-            return responseBody;
-        }
-
-        responseBody.put("failure", true);
-        responseBody.put("message", exception.getMessage());
-       // responseBody.put("errorCode", "");
-        responseBody.put("statusCode", null);
-
-        return responseBody;
-    }
-
-//    /**
-//     * Extracts error code from integration error response body.
-//     * If not found, returns the provided default code.
-//     */
-//    private String extractErrorCode(String responseBody, String defaultCode) {
-//        try {
-//            ObjectMapper mapper = new ObjectMapper();
-//            JsonNode root = mapper.readTree(responseBody);
-//
-//            if (root.has("ErrorCode")) {
-//                return root.get("ErrorCode").asText();
-//            }
-//        } catch (Exception ex) {
-//            logger.warn("Failed to parse error code from response: {}", ex.getMessage());
-//        }
-////
-//        return String.valueOf(defaultCode);
-//       // return defaultCode;
+//    private ResponseEntity<Map> executeRequest(String jobName,
+//                                               Long nin,
+//                                               String url,
+//                                               HttpMethod httpMethod,
+//                                               HttpEntity<Map<String, Object>> requestEntity) {
+//        logger.info("Calling API for jobName={} url={} nin={}", jobName, url, nin);
+//        //Thread.sleep(500);
+//        return restTemplate.exchange(url, httpMethod, requestEntity, Map.class);
 //    }
+
 
     /**
      * Returns a required configuration value.
