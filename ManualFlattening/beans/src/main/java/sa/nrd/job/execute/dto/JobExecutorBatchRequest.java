@@ -1,4 +1,4 @@
-package sa.nrd.job.execute.model;
+package sa.nrd.job.execute.dto;
 
 
 import lombok.Data;

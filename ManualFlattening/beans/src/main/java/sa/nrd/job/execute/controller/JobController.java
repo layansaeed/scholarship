@@ -1,8 +1,8 @@
 package sa.nrd.job.execute.controller;
 
 import sa.nrd.job.execute.job.BeanJob;
-import sa.nrd.job.execute.model.JobExecutorBatchRequest;
-import sa.nrd.job.execute.model.JobExecutorRequest;
+import sa.nrd.job.execute.dto.JobExecutorBatchRequest;
+import sa.nrd.job.execute.dto.JobExecutorRequest;
 import sa.nrd.job.execute.service.job.JobExecutionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +39,35 @@ public ResponseEntity<?> runJobs(@RequestBody JobExecutorBatchRequest request) {
     }
 }
 
+//    @PostMapping()
+//    public ResponseEntity<?> runJob(@RequestBody JobExecutorRequest request) {
+//        try {
+//            System.out.println("execution id= " + request.getExecutionId());
+//
+//            jobExecutionService.runJobsByExecutionId(request);
+//            return ResponseEntity.ok().build();
+//        } catch (Exception ex) {
+//            ex.printStackTrace();
+//            return ResponseEntity.badRequest().body(ex.getMessage());
+//        }
+//    }
+
+    /**
+     * Executes one job using executionId from path variable.
+     */
+    @PostMapping("/{executionId}")
+    public ResponseEntity<?> runJob(@PathVariable Long executionId) {
+        try {
+            jobExecutionService.runJobByExecutionId(executionId);
+            return ResponseEntity.ok().build();
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
+    }
+
+
         @GetMapping("/alive")
         public ResponseEntity<?> alive() {
             logger.info(" alive");
@@ -56,12 +85,12 @@ public ResponseEntity<?> runJobs(@RequestBody JobExecutorBatchRequest request) {
     }
 
     /**
-     * executes one full job using only jobId from path variable
+     * Executes one full job using jobName from path variable.
      */
-    @PostMapping("/run/{jobId}")
-    public ResponseEntity<?> runFullJob(@PathVariable Long jobId) {
+    @PostMapping("/run/{jobName}")
+    public ResponseEntity<?> runFullJob(@PathVariable String jobName) {
         try {
-            jobExecutionService.runFullJobByJobId(jobId);
+            jobExecutionService.runFullJobByJobName(jobName);
             return ResponseEntity.ok().build();
         } catch (Exception ex) {
             ex.printStackTrace();

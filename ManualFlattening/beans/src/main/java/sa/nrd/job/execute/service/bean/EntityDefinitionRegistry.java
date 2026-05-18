@@ -1,6 +1,6 @@
 package sa.nrd.job.execute.service.bean;
 
-import sa.nrd.job.execute.model.EntityDefinition;
+import sa.nrd.job.execute.model.manage.EntityDefinition;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;

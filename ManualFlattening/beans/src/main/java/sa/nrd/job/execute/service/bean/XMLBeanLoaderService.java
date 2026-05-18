@@ -2,8 +2,7 @@ package sa.nrd.job.execute.service.bean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sa.nrd.job.execute.model.EntityDefinition;
-import lombok.extern.slf4j.Slf4j;
+import sa.nrd.job.execute.model.manage.EntityDefinition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.io.Resource;

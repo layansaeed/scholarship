@@ -2,7 +2,7 @@ package sa.nrd.job.execute.repository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sa.nrd.job.execute.model.EntityDefinition;
+import sa.nrd.job.execute.model.manage.EntityDefinition;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.stereotype.Repository;

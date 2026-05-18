@@ -1,4 +1,4 @@
-package sa.nrd.job.execute.model;
+package sa.nrd.job.execute.model.beneficiary;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

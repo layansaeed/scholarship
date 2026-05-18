@@ -1,6 +1,6 @@
 package sa.nrd.job.execute.service.job;
 
-import sa.nrd.job.execute.model.JobDetailsEntity;
+import sa.nrd.job.execute.model.manage.JobDetails;
 import sa.nrd.job.execute.repository.JobDetailsJpaRepository;
 import org.springframework.stereotype.Service;
 
@@ -19,14 +19,13 @@ public class JobDetailsService {
     }
 
     /**
-     * Returns the job details for the given job id.
+     * Returns the job details for the given job name.
      *
-     * @param jobId job identifier
+     * @param jobName job identifier
      * @return job details entity
      */
-    public JobDetailsEntity getJobRequired(Long jobId) {
-        return jobDetailsRepository.findById(jobId)
-                .orElseThrow(() -> new IllegalArgumentException("Job not found for id: " + jobId));
+    public JobDetails getJobRequired(String jobName) {
+        return jobDetailsRepository.findById(jobName)
+                .orElseThrow(() -> new IllegalArgumentException("Job not found for name: " + jobName));
     }
-
 }

@@ -1,67 +1,92 @@
 package sa.nrd.job.execute.service.integration;
 
+import org.springframework.http.*;
+import org.springframework.web.client.RestTemplate;
 import sa.nrd.job.execute.constant.DynamicCallConstants;
+import sa.nrd.job.execute.exception.MaxRetryAttemptsReachedException;
 import sa.nrd.job.execute.service.job.JobConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
+
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class DynamicCallService {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass().getName());
 
-    private final RetryableApiExecutorService retryableApiExecutorService;
+    private final RetryablePageExecutorService retryablePageExecutorService;
     private final JobConfigService jobConfigService;
+    private final RestTemplate restTemplate;
 
-    public DynamicCallService(RetryableApiExecutorService retryableApiExecutorService, JobConfigService jobConfigService) {
-        this.retryableApiExecutorService = retryableApiExecutorService;
+    public DynamicCallService(RetryablePageExecutorService retryablePageExecutorService, JobConfigService jobConfigService, RestTemplate restTemplate) {
+        this.retryablePageExecutorService = retryablePageExecutorService;
+
         this.jobConfigService = jobConfigService;
+        this.restTemplate = restTemplate;
     }
+    //when any retryable attempt success return here to call to another nin
+    //just return false and stop the page after all max attempts failure
+    public List<Map<String, Object>> callApis(String jobName, List<Long> nins) {
 
-
-    /**
-     * Calls the external API for the given job and NIN.
-     * Always returns one map ready for storing.
-     */
-    public Map<String, Object> callApi(String jobName, Long nin) {
         try {
             Map<String, String> config = jobConfigService.getConfigMap(jobName);
 
             String url = buildUrl(config);
             HttpMethod httpMethod = buildHttpMethod(config);
             HttpHeaders headers = buildHeaders(config);
-            Map<String, Object> requestBody = buildRequestBody(nin);
-            HttpEntity<Map<String, Object>> requestEntity = buildRequestEntity(headers, requestBody);
 
-            return retryableApiExecutorService.executeWithRetry(
-                    jobName,
-                    nin,
-                    url,
-                    httpMethod,
-                    requestEntity
-            );
+            List<Map<String, Object>> responses = new ArrayList<>();
+            //object mutable
+            AtomicInteger currentIndex = new AtomicInteger(0);
+
+            //first: currentIndex=0 & responses = []
+            //nins = [1 nin up to 25 NINs]
+
+            //end of list or return false (all attempts failure)
+            while (currentIndex.get() < nins.size()) {
+                boolean shouldContinue =
+                        retryablePageExecutorService.executeWithRetry(
+                                jobName,
+                                nins,
+                                currentIndex,
+                                url,
+                                httpMethod,
+                                headers,
+                                responses
+                        );
+
+                if (!shouldContinue) {
+                    break;
+                    //stop the currect page and responses go back to processpage
+                    // that has failure rows them mapping and insert
+                }
+//                if (!shouldContinue) {
+//                    //When recover returns false, stop everything immediately.
+//                    throw new MaxRetryAttemptsReachedException(
+//                            "Max retry attempts reached for jobName: " + jobName
+//                    );
+//                }
+            }
+
+            return responses;
 
         } catch (Exception exception) {
-            logger.debug("Failed before/while calling API for jobName [{}] nin [{}] exception [{}]",
+            logger.debug("Failed before/while calling APIs for jobName [{}] exception [{}]",
                     jobName,
-                    nin,
                     exception.getMessage());
 
-            return prepareLocalErrorResponse(exception);
-            //callApi(...) still returns a Map-> So it will not go to the CompletableFuture catch.
-            //prepareLocalErrorResponse(...) prevents the outer catch in CompletableFuture from running.
+            List<Map<String, Object>> responses = new ArrayList<>();
+            responses.add(prepareLocalErrorResponse(exception));
+
+            return responses;
         }
     }
 
-    /**
+
+   /**
      * Handles errors that happen before reaching the retryable API executor,
      * such as missing config, invalid HTTP method, invalid media type.
      */
@@ -75,6 +100,50 @@ public class DynamicCallService {
 
         return responseBody;
     }
+
+
+//    /**
+//     * Calls the external API for the given job and NIN.
+//     * Always returns one map ready for storing.
+//     */
+//    public Map<String, Object> callApi(String jobName, Long nin) {
+//            Map<String, String> config = jobConfigService.getConfigMap(jobName);
+//
+//            String url = buildUrl(config);
+//            HttpMethod httpMethod = buildHttpMethod(config);
+//            HttpHeaders headers = buildHeaders(config);
+//            Map<String, Object> requestBody = buildRequestBody(nin);
+//            HttpEntity<Map<String, Object>> requestEntity = buildRequestEntity(headers, requestBody);
+//
+//            ResponseEntity<Map> restResponse =
+//                    restTemplate.exchange(url, httpMethod, requestEntity, Map.class);
+//
+//            logger.debug("Successfully retrieved response for jobName={} nin={}",
+//                    jobName,
+//                    nin);
+//
+//            return prepareSuccessResponse(restResponse);
+//
+//    }
+//
+//    private Map<String, Object> prepareSuccessResponse(ResponseEntity<Map> restResponse) {
+//        Map<String, Object> responseBody;
+//
+//        if (restResponse.getBody() == null) {
+//            responseBody = new LinkedHashMap<>();
+//        } else {
+//            responseBody = new LinkedHashMap<>(restResponse.getBody());
+//        }
+//
+//       // responseBody.putIfAbsent("nin", nin);
+//        responseBody.put("failure", false);
+//        responseBody.put("message", null);
+//        responseBody.put("errorCode", null);
+//        responseBody.put("statusCode", String.valueOf(restResponse.getStatusCode().value()));
+//
+//        return responseBody;
+//    }
+
     /**
      * Builds the request URL from configuration.
      */
@@ -178,4 +247,44 @@ public class DynamicCallService {
 
         return value;
     }
+
+    //    /**
+//     * Prepares final map for error case.
+//     *
+//     * @param exception current exception
+//     * @return error response map
+//     */
+//    public Map<String, Object> prepareErrorResponse(Exception exception) {
+//        Map<String, Object> responseBody = new LinkedHashMap<>();
+//
+//        Throwable actualException = exception;
+//
+//        if (exception instanceof RetryableIntegrationException && exception.getCause() != null) {
+//            actualException = exception.getCause();
+//        }
+//
+//        //RetryableIntegrationException -> cause = HttpServerErrorException
+//        //unwraps exception and sees the real cause
+//
+//        //if (actualException instanceof HttpStatusCodeException httpEx) {
+//        if (actualException instanceof HttpClientErrorException
+//                || actualException instanceof HttpServerErrorException) {
+//
+//            HttpStatusCodeException httpEx = (HttpStatusCodeException) actualException;
+//            responseBody.put("failure", true);
+//            responseBody.put("message", httpEx.getResponseBodyAsString());
+//            responseBody.put("statusCode", String.valueOf(httpEx.getRawStatusCode()));
+//            responseBody.put("errorCode", null);
+//            return responseBody;
+//        }
+//
+//        responseBody.put("failure", true);
+//        responseBody.put("message", actualException.getMessage());
+//        responseBody.put("statusCode", null);
+//        responseBody.put("errorCode", null);
+//
+//        return responseBody;
+//    }
+//
+//
 }

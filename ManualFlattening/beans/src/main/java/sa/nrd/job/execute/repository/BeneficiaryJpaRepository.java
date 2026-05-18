@@ -1,6 +1,6 @@
 package sa.nrd.job.execute.repository;
 
-import sa.nrd.job.execute.model.BeneficiaryEntity;
+import sa.nrd.job.execute.model.beneficiary.BeneficiaryEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

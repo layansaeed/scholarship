@@ -1,4 +1,4 @@
-package sa.nrd.job.execute.model;
+package sa.nrd.job.execute.model.manage;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -16,21 +16,18 @@ public class JobExecutionEntity {
     @Column(name = "EXECUTION_ID")
     private Long executionId;
 
-    @Column(name = "JOB_ID")
-    private Long jobId;
+    @Column(name = "JOB_NAME")
+    private String jobName;
 
     @Column(name = "AUDIT_ID")
     private Long auditId;
 
-    @Column(name = "SERVER_ID")
-    private Long serverId;
+    @Column(name = "SERVER_NAME")
+    private String serverName;
 
     @Column(name = "NIN_RANGE_START")
     private Long ninRangeStart;
 
     @Column(name = "NIN_RANGE_END")
     private Long ninRangeEnd;
-
-    @Column(name = "JOB_NAME")
-    private String jobName;
 }

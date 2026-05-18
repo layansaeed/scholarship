@@ -3,6 +3,7 @@ package sa.nrd.job.execute.service.integration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.annotation.Backoff;
@@ -235,3 +236,52 @@ public class RetryableApiExecutorService {
         return responseBody;
     }
 }
+
+//
+/**
+// * Calls the external API for the given job and NIN.
+// * Always returns one map ready for storing.
+// */
+//public Map<String, Object> callApi(String jobName, Long nin) {
+//    try {
+//        Map<String, String> config = jobConfigService.getConfigMap(jobName);
+//
+//        String url = buildUrl(config);
+//        HttpMethod httpMethod = buildHttpMethod(config);
+//        HttpHeaders headers = buildHeaders(config);
+//        Map<String, Object> requestBody = buildRequestBody(nin);
+//        HttpEntity<Map<String, Object>> requestEntity = buildRequestEntity(headers, requestBody);
+//
+//            return retryableApiExecutorService.executeWithRetry(
+//                    jobName,
+//                    nin,
+//                    url,
+//                    httpMethod,
+//                    requestEntity
+//            );
+//
+//    } catch (Exception exception) {
+//        logger.debug("Failed before/while calling API for jobName [{}] nin [{}] exception [{}]",
+//                jobName,
+//                nin,
+//                exception.getMessage());
+//
+//        return prepareLocalErrorResponse(exception);
+//        //callApi(...) still returns a Map-> So it will not go to the CompletableFuture catch.
+//        //prepareLocalErrorResponse(...) prevents the outer catch in CompletableFuture from running.
+//    }
+//}
+//   /**
+//     * Handles errors that happen before reaching the retryable API executor,
+//     * such as missing config, invalid HTTP method, invalid media type.
+//     */
+//    private Map<String, Object> prepareLocalErrorResponse(Exception exception) {
+//        Map<String, Object> responseBody = new LinkedHashMap<>();
+//
+//        responseBody.put("failure", true);
+//        responseBody.put("message", exception.getMessage());
+//        responseBody.put("statusCode", null);
+//        responseBody.put("errorCode", null);
+//
+//        return responseBody;
+//    }

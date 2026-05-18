@@ -1,10 +1,10 @@
-package sa.nrd.job.execute.model;
-
+package sa.nrd.job.execute.model.manage;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class JobExecutionAuditEntity {
+public class JobExecutionAudit {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -20,13 +20,12 @@ public class JobExecutionAuditEntity {
     private Long auditId;
 
     /**
-     * Many audit rows have one status from JOB_EXECUTION_STATUS
+     * Many audit rows have one status from JOB_EXECUTION_STATUS.
      */
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "STATUS", referencedColumnName = "STATUS", nullable = false, foreignKey = @ForeignKey(name = "FK_AUDIT_STATUS"))
+    @JoinColumn(name = "STATUS", referencedColumnName = "STATUS", nullable = false)
     private JobExecutionStatus status;
 
     @Column(name = "END_TIME")
     private LocalDateTime endTime;
-
 }
